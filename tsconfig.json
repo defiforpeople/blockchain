@@ -5,11 +5,12 @@
     "strict": true,
     "esModuleInterop": true,
     "outDir": "dist",
+    "baseUrl": "src",
     "declaration": true,
     "typeRoots": ["node_modules/@types"]
   },
   "compileOnsave": false,
   "autoFixOnSave": true,
-  "include": ["./scripts", "./test", "./typechain"],
+  "include": ["./src/scripts", "./src/test", "./src/typechain"],
   "files": ["./hardhat.config.ts"]
 }
