@@ -6,12 +6,12 @@
   "scripts": {
     "test:contracts": "npx hardhat test --network hardhat",
     "test:parallel": "npx hardhat test --network hardhat --parallel",
-    "test:utils": "env TS_NODE_COMPILER_OPTIONS='{\"module\": \"commonjs\" }' mocha -r ts-node/register 'utils/**/*.test.ts'",
+    "test:utils": "env TS_NODE_COMPILER_OPTIONS='{\"module\": \"commonjs\" }' mocha -r ts-node/register './src/utils/**/*.test.ts'",
     "start": "node ./dist/scripts/server.js",
-    "dev": "nodemon ./scripts/server.ts | pino-pretty",
+    "dev": "nodemon ./src/scripts/server.ts | pino-pretty",
     "typescript": "tsc",
-    "linter": "eslint ./utils --ext .js,.ts",
-    "fix-linter": "eslint ./utils --ext .js,.ts --fix"
+    "linter": "eslint ./src/utils --ext .js,.ts",
+    "fix-linter": "eslint ./src/utils --ext .js,.ts --fix"
   },
   "repository": {
     "type": "git",
