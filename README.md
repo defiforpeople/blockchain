@@ -42,3 +42,27 @@ sequenceDiagram
 ```
 
 ### Leaving the market
+
+```mermaid
+sequenceDiagram
+    actor User
+    User->>Strategy_Contract: Request withdraw tokens
+    Strategy_Contract-->>User: 
+
+    Strategy_Contract->>Strategy_Contract: Emit InvestmentWithdraw(address, amount)
+    Strategy_Service--)Strategy_Contract: Listen InvestmentWithdraw event
+
+    Strategy_Service->>Aave_Contract: Repay with collateral all debt amount
+    Aave_Contract-->>Strategy_Service: 
+    Strategy_Service->>Aave_Contract: Withdraw all token amount
+    Aave_Contract-->>Strategy_Service: 
+
+    Aave_Contract--)Strategy_Contract: Transfer tokens amount
+
+    Strategy_Service->>Strategy_Contract: Change investment status
+    Strategy_Contract-->>Strategy_Service: 
+
+    Strategy_Contract->>Strategy_Contract: Emit InvestmentStatus(address) event
+    Strategy_Contract--)User_Wallet: Transfer tokens amount
+    User--)Strategy_Contract: Listen InvestmentStatus event
+```
