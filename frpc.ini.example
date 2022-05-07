@@ -1,0 +1,8 @@
+[common]
+  server_addr = <MORALIS_URL>
+  server_port = 7000
+  token = <MORALIS_TOKEN>
+[hardhat]
+  type = http
+  local_port = 8545
+  custom_domains = <MORALIS_URL>
