@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.10;
 
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
@@ -8,7 +8,7 @@ import {IERC20} from "openzeppelin-solidity/contracts/interfaces/IERC20.sol";
 contract TestingAavePool {
     IPool public pool;
 
-    constructor(address _pool) public {
+    constructor(address _pool) {
         pool = IPool(_pool);
     }
 
