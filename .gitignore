@@ -12,3 +12,5 @@ cache
 artifacts
 frpc.ini
 .vscode/
+scripts/node_modules/
+flatten/
