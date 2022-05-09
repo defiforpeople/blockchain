@@ -1,0 +1,41 @@
+
+# automatically fetch contract sources from Etherscan
+autofetch_sources: True
+
+# require OpenZeppelin Contracts v4.3.2
+dependencies:
+  - OpenZeppelin/openzeppelin-contracts@4.5.0
+  - aave/aave-v3-core@1.16.0
+
+# path remapping to support OpenZepplin imports with NPM-style path
+compiler:
+  solc:
+    version: "0.8.10"
+    remappings:
+      - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.5.0"
+      - "@aave=aave/aave-v3-core@1.16.0"
+dotenv: .env
+
+networks:
+# use Ganache's forked mainnet mode as the default network
+  default: mainnet-fork
+  mainnet-fork:
+    aave_lending_pool_v2: "0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5"
+    weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+  kovan:
+    aave_lending_pool_v3: "0x651b8A8cA545b251a8f49B57D5838Da0a8DFbEF9"
+    aave_lending_pool_v2: "0x88757f2f99175387ab4c6a4b3067c77a695b0349"
+    weth: "0xd0a1e359811322d97991e03f863a0c30c2cf029c"
+  mainnet:
+    aave_lending_pool_v2: "0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5"
+    weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+  avalanche:
+    aave_lending_pool_v2: "0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb"
+    weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+  rinkeby:
+    # aave_lending_pool_v3: "0xBA6378f1c1D046e9EB0F538560BA7558546edF3C"
+    aave_lending_pool_v3: "0xE039BdF1d874d27338e09B55CB09879Dedca52D8"
+    weth: "0xd74047010D77c5901df5b0f9ca518aED56C85e8D"
+
+wallets:
+  from_key: ${PRIVATE_KEY}
