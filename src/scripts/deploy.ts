@@ -1,12 +1,14 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  const Greeter = await ethers.getContractFactory("Greeter");
-  const greeter = await Greeter.deploy("Hello, Hardhat!");
+  const TestingAavePool = await ethers.getContractFactory("TestingAavePool");
+  const aaveContract = await TestingAavePool.deploy(
+    "0xE039BdF1d874d27338e09B55CB09879Dedca52D8"
+  );
 
-  await greeter.deployed();
+  await aaveContract.deployed();
 
-  console.log("Greeter deployed to:", greeter.address);
+  console.log("aaveContract deployed to:", aaveContract.address);
 }
 
 main().catch((error) => {

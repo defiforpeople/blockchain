@@ -11,3 +11,4 @@ typechain
 cache
 artifacts
 frpc.ini
+.vscode/
