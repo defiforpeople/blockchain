@@ -21,8 +21,15 @@ contract TestingAavePool {
     function getUser(address _user)
         external
         view
-        returns (DataTypes.UserConfigurationMap memory)
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        )
     {
-        return pool.getUserConfiguration(_user);
+        return pool.getUserAccountData(_user);
     }
 }
