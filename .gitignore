@@ -1,5 +1,4 @@
-node_modules
-package-lock.json
+node_modules/
 
 .env
 dist
@@ -14,3 +13,4 @@ frpc.ini
 .vscode/
 scripts/node_modules/
 flatten/
+build/
