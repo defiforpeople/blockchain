@@ -1,5 +1,5 @@
 import { expect, use } from "chai";
-import { Contract, BigNumber, Signer } from "ethers";
+import { Contract, BigNumber } from "ethers";
 import {
   deployContract,
   deployMockContract,
@@ -12,49 +12,45 @@ import IPoolTest from "../../build/IPoolTest.json";
 use(solidity);
 
 describe("TestingAavePool", () => {
-  // beforeEach(async () => {
   let TestingAaveContract: Contract;
   let IPoolTestInterface: Contract;
+
   const setup = async () => {
     const [wallet] = new MockProvider().getWallets();
 
     const Mock = [
-      BigNumber.from("6653617439"),
-      BigNumber.from("705406114"),
-      BigNumber.from("4556939919"),
-      BigNumber.from("8182"),
-      BigNumber.from("7909"),
-      BigNumber.from("7717525664939161557"),
+      6658762878,
+      705414466,
+      4561001094,
+      8182,
+      7909,
+      BigNumber.from("7723402410349775844"),
     ];
 
     IPoolTestInterface = await deployMockContract(wallet, IPoolTest.abi);
-
     TestingAaveContract = await deployContract(wallet, TestingAavePool, [
       IPoolTestInterface.address,
     ]);
-    // });
+
     return { wallet, IPoolTestInterface, TestingAaveContract, Mock };
   };
 
   it("Calls user info with 'getUser' in 'TestingAaveContract' contract", async () => {
     const { wallet, IPoolTestInterface, TestingAaveContract, Mock } =
       await setup();
-    const IPoolResponse =
-      await IPoolTestInterface.mock.getUserAccountData.returns(Mock);
-    console.info("Response: ", IPoolResponse);
-    console.log("Si ", TestingAaveContract.getUser(wallet.address));
 
-    expect(TestingAaveContract.getUser(wallet.address).values).to.be.equal(
-      IPoolResponse
-    );
+    await IPoolTestInterface.mock.getUserAccountData
+      .withArgs(wallet.address)
+      .returns(Mock[0], Mock[1], Mock[2], Mock[3], Mock[4], Mock[5]);
+
+    const contractResponse = await TestingAaveContract.getUser(wallet.address);
+    console.log("Response: ", contractResponse[0]);
+
+    expect(await contractResponse[0]).to.be.equal(Mock[0]);
+    expect(await contractResponse[1]).to.be.equal(Mock[1]);
+    expect(await contractResponse[2]).to.be.equal(Mock[2]);
+    expect(await contractResponse[3]).to.be.equal(Mock[3]);
+    expect(await contractResponse[4]).to.be.equal(Mock[4]);
+    expect(await contractResponse[5]).to.be.equal(Mock[5]);
   });
 });
-
-// [
-//   BigNumber { value: "6653617439" },
-//   BigNumber { value: "705406114" },
-//   BigNumber { value: "4556939919" },
-//   BigNumber { value: "8182" },
-//   BigNumber { value: "7909" },
-//   BigNumber { value: "7717525664939161557" }
-// ]
