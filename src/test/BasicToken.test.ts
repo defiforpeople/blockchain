@@ -1,16 +1,34 @@
 import { expect, use } from "chai";
-import { Contract } from "ethers";
-import { deployContract, MockProvider, solidity } from "ethereum-waffle";
-import BasicToken from "../../build/BasicToken.json";
+import { Contract, Wallet } from "ethers";
+import { solidity } from "ethereum-waffle";
+import { ethers } from "hardhat";
 
 use(solidity);
 
 describe("BasicToken", () => {
-  const [wallet, walletTo] = new MockProvider().getWallets();
+  let wallet: Wallet, walletTo: Wallet;
   let token: Contract;
 
   beforeEach(async () => {
-    token = await deployContract(wallet, BasicToken, [1000]);
+    // prepare randoms ownerWallet
+    wallet = ethers.Wallet.createRandom().connect(ethers.provider);
+    walletTo = ethers.Wallet.createRandom().connect(ethers.provider);
+
+    // send 1 eth from signer(0) to randoms wallets
+    const signer = ethers.provider.getSigner(0);
+    await signer.sendTransaction({
+      to: wallet.address,
+      value: ethers.utils.parseEther("1.0"),
+    });
+    await signer.sendTransaction({
+      to: walletTo.address,
+      value: ethers.utils.parseEther("1.0"),
+    });
+
+    const Token = await (
+      await ethers.getContractFactory("BasicToken")
+    ).connect(wallet);
+    token = await Token.deploy(1000);
   });
 
   it("Assigns initial balance", async () => {
@@ -36,15 +54,5 @@ describe("BasicToken", () => {
     const tokenFromOtherWallet = token.connect(walletTo);
     await expect(tokenFromOtherWallet.transfer(wallet.address, 1)).to.be
       .reverted;
-  });
-
-  it("Calls totalSupply on BasicToken contract", async () => {
-    await token.totalSupply();
-    expect("totalSupply").to.be.calledOnContract(token);
-  });
-
-  it("Calls balanceOf with sender address on BasicToken contract", async () => {
-    await token.balanceOf(wallet.address);
-    expect("balanceOf").to.be.calledOnContractWith(token, [wallet.address]);
   });
 });
