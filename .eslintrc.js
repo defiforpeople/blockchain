@@ -26,5 +26,13 @@ module.exports = {
         allowModules: ["chai"],
       },
     ],
+    "node/no-missing-import": [
+      "error",
+      {
+        allowModules: [],
+        resolvePaths: ["./src"],
+        tryExtensions: [".js", ".json", ".node", ".ts"],
+      },
+    ],
   },
 };

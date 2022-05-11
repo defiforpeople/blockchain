@@ -61,6 +61,12 @@ const config: HardhatUserConfig = {
   paths: {
     root: "./src",
   },
+  typechain: {
+    outDir: "./typechain",
+    target: "ethers-v5",
+    alwaysGenerateOverloads: false,
+    externalArtifacts: ["externalArtifacts/*.json"],
+  },
 };
 
 export default config;
