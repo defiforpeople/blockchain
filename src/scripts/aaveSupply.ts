@@ -2,10 +2,12 @@ import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
 import { IPool__factory, IPool, IERC20, IERC20__factory } from "../typechain";
+import { BigNumber } from "ethers";
 
 export default async function main(
   aavePoolAddress: string,
-  tokenAddress: string
+  tokenAddress: string,
+  amount: BigNumber | number
 ) {
   const wallets = await ethers.getSigners();
   const wallet = wallets[0];
@@ -20,8 +22,6 @@ export default async function main(
     aavePoolAddress
   )) as IPool;
 
-  const amount = ethers.utils.parseEther("0.000003");
-  console.log("Amount: ", amount);
   console.log("Approving...");
   const gasLimit = 2074040;
   const tx = await token.approve(aavePool.address, amount, {
@@ -48,9 +48,14 @@ export default async function main(
   console.log("TX: ", supTx);
 }
 
+// const maxDai = 1;
+// const ethDaiPrice = 1900;
+// const amount = ethers.utils.parseEther(`${maxDai / ethDaiPrice}`);
+// const rinkebyDAI = "0x4aAded56bd7c69861E8654719195fCA9C670EB45";
+const amount = 1000000;
+console.log("Amount: ", amount);
 const rinkebyWETH = "0xd74047010D77c5901df5b0f9ca518aED56C85e8D";
-// const rinkebyWBTC = "0x124F70a8a3246F177b0067F435f5691Ee4e467DD";
-main("0xE039BdF1d874d27338e09B55CB09879Dedca52D8", rinkebyWETH).catch(
+main("0xE039BdF1d874d27338e09B55CB09879Dedca52D8", rinkebyWETH, amount).catch(
   (error) => {
     console.error(error);
     process.exitCode = 1;
