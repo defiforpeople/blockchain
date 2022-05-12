@@ -66,9 +66,5 @@
     "ts-node": "^10.7.0",
     "typechain": "^5.2.0",
     "typescript": "^4.6.4"
-  },
-  "dependencies": {
-    "@aave/contract-helpers": "^1.2.2",
-    "@aave/math-utils": "^1.2.2"
   }
 }
