@@ -4,7 +4,7 @@ import "@nomiclabs/hardhat-ethers";
 import { IPool__factory, IPool, IERC20__factory, IERC20 } from "../typechain";
 import { BigNumber } from "ethers";
 
-export default async function main(
+export default async function borrowAave(
   aavePoolAddress: string,
   tokenAddress: string,
   amount: BigNumber
@@ -45,9 +45,11 @@ const amount = ethers.utils.parseEther(`${max / 2}`);
 console.log("Amount: ", amount);
 const rinkebyWETH = "0xd74047010D77c5901df5b0f9ca518aED56C85e8D";
 // const rinkebyWBTC = "0x124F70a8a3246F177b0067F435f5691Ee4e467DD";
-main("0xE039BdF1d874d27338e09B55CB09879Dedca52D8", rinkebyWETH, amount).catch(
-  (error) => {
-    console.error(error);
-    process.exitCode = 1;
-  }
-);
+borrowAave(
+  "0xE039BdF1d874d27338e09B55CB09879Dedca52D8",
+  rinkebyWETH,
+  amount
+).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
