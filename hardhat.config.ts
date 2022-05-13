@@ -7,7 +7,14 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 
-dotenv.config();
+const found = process.argv.indexOf("--network");
+const networkName = process.argv[found + 1];
+if (!networkName) {
+  throw new Error("invalid network name");
+}
+dotenv.config({
+  path: `.env.${networkName}`,
+});
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -41,12 +48,12 @@ const config: HardhatUserConfig = {
   },
   networks: {
     ropsten: {
-      url: process.env.ROPSTEN_URL || "",
+      url: process.env.URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
     rinkeby: {
-      url: process.env.RINKEBY_URL || "",
+      url: process.env.URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
