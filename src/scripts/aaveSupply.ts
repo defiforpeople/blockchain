@@ -3,11 +3,21 @@ import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
 import { IPool__factory, IPool, IERC20, IERC20__factory } from "../typechain";
 import { BigNumber } from "ethers";
+import { parseEther } from "ethers/lib/utils";
+
+const { WETH_ADDRESS, AAVE_POOL_ADDRESS } = process.env;
+if (!WETH_ADDRESS || !AAVE_POOL_ADDRESS) {
+  throw new Error("invalid ENV values");
+}
+
+const GAS_LIMIT = 2074040;
+const max = 0.0064423;
+const AMOUNT = parseEther(`${max / 2}`);
 
 export default async function supplyAave(
   aavePoolAddress: string,
   tokenAddress: string,
-  amount: BigNumber | number
+  amount: BigNumber
 ) {
   const wallets = await ethers.getSigners();
   const wallet = wallets[0];
@@ -41,25 +51,21 @@ export default async function supplyAave(
     0,
     {
       from: wallet.address,
-      gasLimit: gasLimit,
+      gasLimit: GAS_LIMIT,
     }
   );
+  await supTx.wait();
   console.log("Supplied");
   console.log("TX: ", supTx);
 }
 
+// TODO(nb): Get EthDai price from Chainlink
 // const maxDai = 1;
 // const ethDaiPrice = 1900;
 // const amount = ethers.utils.parseEther(`${maxDai / ethDaiPrice}`);
 // const rinkebyDAI = "0x4aAded56bd7c69861E8654719195fCA9C670EB45";
-const amount = 1000000;
-console.log("Amount: ", amount);
-const rinkebyWETH = "0xd74047010D77c5901df5b0f9ca518aED56C85e8D";
-supplyAave(
-  "0xE039BdF1d874d27338e09B55CB09879Dedca52D8",
-  rinkebyWETH,
-  amount
-).catch((error) => {
+
+supplyAave(AAVE_POOL_ADDRESS, WETH_ADDRESS, AMOUNT).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
