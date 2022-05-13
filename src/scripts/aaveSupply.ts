@@ -4,7 +4,7 @@ import "@nomiclabs/hardhat-ethers";
 import { IPool__factory, IPool, IERC20, IERC20__factory } from "../typechain";
 import { BigNumber } from "ethers";
 
-export default async function main(
+export default async function supplyAave(
   aavePoolAddress: string,
   tokenAddress: string,
   amount: BigNumber | number
@@ -55,9 +55,11 @@ export default async function main(
 const amount = 1000000;
 console.log("Amount: ", amount);
 const rinkebyWETH = "0xd74047010D77c5901df5b0f9ca518aED56C85e8D";
-main("0xE039BdF1d874d27338e09B55CB09879Dedca52D8", rinkebyWETH, amount).catch(
-  (error) => {
-    console.error(error);
-    process.exitCode = 1;
-  }
-);
+supplyAave(
+  "0xE039BdF1d874d27338e09B55CB09879Dedca52D8",
+  rinkebyWETH,
+  amount
+).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
