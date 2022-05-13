@@ -3,7 +3,7 @@ import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
 import { IPool__factory, IPool } from "../typechain";
 
-export default async function getUserData(
+export default async function getUserDataAave(
   aavePoolAddress: string,
   userAddress: string,
   tokenAddress?: string
@@ -29,7 +29,7 @@ const main = async () => {
   const wallets = await ethers.getSigners();
   const wallet = wallets[0];
   const rinkebyWBTC = "0x124F70a8a3246F177b0067F435f5691Ee4e467DD";
-  getUserData(
+  getUserDataAave(
     "0xE039BdF1d874d27338e09B55CB09879Dedca52D8",
     wallet.address,
     rinkebyWBTC
