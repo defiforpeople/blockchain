@@ -4,13 +4,19 @@ import "@nomiclabs/hardhat-ethers";
 import { IPool__factory, IPool, IERC20__factory, IERC20 } from "../typechain";
 import { BigNumber } from "ethers";
 
+const { WETH_ADDRESS, AAVE_POOL_ADDRESS } = process.env;
+if (!WETH_ADDRESS || !AAVE_POOL_ADDRESS) {
+  throw new Error("invalid ENV values");
+}
+
+const GAS_LIMIT = 2074040;
+
 export default async function borrowAave(
   aavePoolAddress: string,
   tokenAddress: string,
   amount: BigNumber
 ) {
-  const wallets = await ethers.getSigners();
-  const wallet = wallets[0];
+  const [wallet] = await ethers.getSigners();
 
   const aavePool = (await ethers.getContractAt(
     IPool__factory.abi,
@@ -22,8 +28,6 @@ export default async function borrowAave(
     tokenAddress
   )) as IERC20;
 
-  const gasLimit = 2074040;
-
   console.log("Borrowing...");
   const supTx = await aavePool.borrow(
     token.address,
@@ -33,23 +37,20 @@ export default async function borrowAave(
     wallet.address,
     {
       from: wallet.address,
-      gasLimit: gasLimit,
+      gasLimit: GAS_LIMIT,
     }
   );
   console.log("Borrowed");
   console.log("TX: ", supTx);
+
+  await supTx.wait();
 }
 
-const max = 0.0063795;
+// TODO(nb): Should get the max amount to borrow in GetUserData
+const max = 0.0000628;
 const amount = ethers.utils.parseEther(`${max / 2}`);
 console.log("Amount: ", amount);
-const rinkebyWETH = "0xd74047010D77c5901df5b0f9ca518aED56C85e8D";
-// const rinkebyWBTC = "0x124F70a8a3246F177b0067F435f5691Ee4e467DD";
-borrowAave(
-  "0xE039BdF1d874d27338e09B55CB09879Dedca52D8",
-  rinkebyWETH,
-  amount
-).catch((error) => {
+borrowAave(AAVE_POOL_ADDRESS, WETH_ADDRESS, amount).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
