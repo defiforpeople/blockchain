@@ -8,35 +8,21 @@ contract FlashloanFarming is FlashLoanReceiverBase {
     uint256 public flashloanAmount;
     uint256 public ltv;
     uint256 public maxAvailableAmount;
+    address public aavePool;
 
-    function getTokenInfo(address _token) internal returns (uint256, uint256) {
-        // Get LTV & max available liquidity
-    }
-
-    function calculateFlashloanAmount(uint256 _amount, uint256 _ltv)
+    function calculateFlashloanAmount(uint256 _amount, uint256 _ltv, uint256 _flashloanFee)
         internal
         returns (uint256)
     {
         tokenPercentage = 100 - (_ltv * 100);
         totalSupplyAmount = (_amount * tokenPercentage) / 100;
         flashloanAmount = (_ltv * totalSupplyAmount) / 100;
-        return flashloanAmount;
+        return flashloanAmount - _flashloanFee;
     }
 
     function askFlashloan(address tokenAddr, uint256 _amount) internal {
         // Ask flashloan on Aave
-    }
-
-    function supplyLiquidity(address tokenAddr, uint256 _amount) internal {
-        // supplyWithPermit() on Aave
-    }
-
-    function borrowLiquidity(address tokenAddr, uint256 _amount) internal {
-        // borrow() on Aave
-    }
-
-    function repayLiquidity(address tokenAddr, uint256 _amount) internal {
-        // repay() on Aave
+        // flashLoan( address receiverAddress, address[] calldata assets, uint256[] calldata amounts, uint256[] interestRateModes, address onBehalfOf, bytes calldata params, uint16 referralCode)
     }
 
     function repayFlashloan(address tokenAddr, uint256 _amount) internal {
@@ -60,17 +46,17 @@ contract FlashloanFarming is FlashLoanReceiverBase {
 
     function startStrategy(address tokenAddr, uint256 _amount) external {
         require(_amount > 0, "Amount must be greater than 0");
-
-        (ltv, maxAvailableAmount) = getTokenInfo(tokenAddr);
+        (ltv, maxAvailableAmount) = getConfiguration(tokenAddr);
         require(
             ltv > 0 && maxAvailableAmount > 0,
             "LTV & available liquidity must be greater than 0"
         );
 
-        flashloanAmount = calculateFlashloanAmount(_amount, ltv);
+        flashloanFee = aavePool.FLASHLOAN_PREMIUM_TOTAL();
+        flashloanAmount = calculateFlashloanAmount(_amount, ltv, flashloanFee);
         askFlashloan(tokenAddr, flashloanAmount);
-        supplyLiquidity(tokenAddr, _amount + flashloanAmount);
-        borrowLiquidity(tokenAddr, FlashloanAmount);
+        aavePool.supplyWithPermit(tokenAddr, _amount + flashloanAmount, address(this), 0, uint256 deadline, uint8 permitV, bytes32 permitR, bytes32 permitS);        
+        aavePool.borrow(tokenAddr, FlashloanAmount, 2, 0, address(this));
         repayFlashloan(tokenAddr, FlashloanAmount);
 
         emit Success(tokenAddr, msg.sender, _amount + flashloanAmount, true);
@@ -86,8 +72,9 @@ contract FlashloanFarming is FlashLoanReceiverBase {
         require(investments[msg.sender], "Investment not found");
         (tokenAddr, amount, flashloanAmount, _) = investments[msg.sender];
         askFlashloan(tokenAddr, flashloanAmount);
-        repayLiquidity(tokenAddr, flashloanAmount);
-        withdrawLiquidity(tokenAddr, flashloanAmount);
+        aavePool.repayWithATokens(tokenAddr, flashloanAmount, 2);
+        
+        aavePool.withdraw(tokenAddr, amount + flashloanAmount, address(this));
         repayFlashloan(tokenAddr, flashloanAmount);
         token.transfer(userAddr, amount);
     }
