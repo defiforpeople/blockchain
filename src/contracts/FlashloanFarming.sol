@@ -3,17 +3,23 @@
 pragma solidity ^0.8.0;
 
 contract FlashloanFarming is FlashLoanReceiverBase {
+    uint256 public tokenPercentage;
+    uint256 public totalSupplyAmount;
+    uint256 public flashloanAmount;
+    uint256 public ltv;
+    uint256 public maxAvailableAmount;
+
     function getTokenInfo(address _token) internal returns (uint256, uint256) {
         // Get LTV & max available liquidity
     }
 
-    function calculateFlashloanAmount(uint256 _amount, uint256 ltv)
+    function calculateFlashloanAmount(uint256 _amount, uint256 _ltv)
         internal
         returns (uint256)
     {
-        tokenPercentage = 100 - (ltv * 100);
+        tokenPercentage = 100 - (_ltv * 100);
         totalSupplyAmount = (_amount * tokenPercentage) / 100;
-        flashloanAmount = (ltv * totalSupplyAmount) / 100;
+        flashloanAmount = (_ltv * totalSupplyAmount) / 100;
         return flashloanAmount;
     }
 
@@ -37,7 +43,20 @@ contract FlashloanFarming is FlashLoanReceiverBase {
         // Give back the flashloan
     }
 
-    event Success(address tokenAddr, uint256 userAddr, uint256 _amount);
+    event Success(
+        address tokenAddr,
+        uint256 userAddr,
+        uint256 amount,
+        bool success
+    );
+
+    struct Investment {
+        address tokenAddr;
+        uint256 amount;
+        uint256 flashloanAmount;
+        bool success;
+    }
+    mapping(address => Investment) public investments;
 
     function startStrategy(address tokenAddr, uint256 _amount) external {
         require(_amount > 0, "Amount must be greater than 0");
@@ -54,14 +73,22 @@ contract FlashloanFarming is FlashLoanReceiverBase {
         borrowLiquidity(tokenAddr, FlashloanAmount);
         repayFlashloan(tokenAddr, FlashloanAmount);
 
-        emit Success(tokenAddr, msg.sender, _amount + flashloanAmount);
+        emit Success(tokenAddr, msg.sender, _amount + flashloanAmount, true);
+        investments[msg.sender] = Investment(
+            tokenAddr,
+            _amount,
+            flashloanAmount,
+            true
+        );
     }
 
     function closeStrategy(address userAddr) external {
+        require(investments[msg.sender], "Investment not found");
+        (tokenAddr, amount, flashloanAmount, _) = investments[msg.sender];
         askFlashloan(tokenAddr, flashloanAmount);
         repayLiquidity(tokenAddr, flashloanAmount);
         withdrawLiquidity(tokenAddr, flashloanAmount);
-        repayFlashloan(tokenAddr, _amount);
-        token.transfer(userAddr, _amount);
+        repayFlashloan(tokenAddr, flashloanAmount);
+        token.transfer(userAddr, amount);
     }
 }
