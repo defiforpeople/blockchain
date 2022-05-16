@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
-import { IPool__factory, IPool } from "../typechain";
+import { IPool__factory, IPool } from "../../typechain";
 const logger = require("pino")();
 
 // get ENV values

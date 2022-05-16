@@ -45,6 +45,10 @@ node:
 	@echo "[node] running hardhat node..."
 	@npx hardhat node
 
+console:
+	@echo "[console] running hardhat node..."
+	@npx hardhat console --network localhost
+
 dev:
 	@echo "[dev] running service in debug mode..."
 	@npm run dev 

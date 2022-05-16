@@ -1,8 +1,14 @@
 import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 import { BigNumber } from "ethers";
-// eslint-disable-next-line camelcase
-import { IPool__factory, IPool, IERC20__factory, IERC20 } from "../typechain";
+import {
+  // eslint-disable-next-line camelcase
+  IPool__factory,
+  IPool,
+  // eslint-disable-next-line camelcase
+  IERC20__factory,
+  IERC20,
+} from "../../typechain";
 const logger = require("pino")();
 
 // get ENV values
