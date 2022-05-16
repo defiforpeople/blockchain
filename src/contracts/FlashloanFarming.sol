@@ -29,13 +29,17 @@ contract FlashloanFarming is FlashLoanReceiverBase {
         // borrow() on Aave
     }
 
+    function repayLiquidity(address tokenAddr, uint256 _amount) internal {
+        // repay() on Aave
+    }
+
     function repayFlashloan(address tokenAddr, uint256 _amount) internal {
         // Give back the flashloan
     }
 
     event Success(address tokenAddr, uint256 userAddr, uint256 _amount);
 
-    function exectureOperation(address tokenAddr, uint256 _amount) external {
+    function startStrategy(address tokenAddr, uint256 _amount) external {
         require(_amount > 0, "Amount must be greater than 0");
 
         (ltv, maxAvailableAmount) = getTokenInfo(tokenAddr);
@@ -51,5 +55,13 @@ contract FlashloanFarming is FlashLoanReceiverBase {
         repayFlashloan(tokenAddr, FlashloanAmount);
 
         emit Success(tokenAddr, msg.sender, _amount + flashloanAmount);
+    }
+
+    function closeStrategy(address userAddr) external {
+        askFlashloan(tokenAddr, flashloanAmount);
+        repayLiquidity(tokenAddr, flashloanAmount);
+        withdrawLiquidity(tokenAddr, flashloanAmount);
+        repayFlashloan(tokenAddr, _amount);
+        token.transfer(userAddr, _amount);
     }
 }
