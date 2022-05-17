@@ -1,8 +1,8 @@
 {
-  "name": "strategy-recursive-yield-farming",
-  "version": "1.0.0",
+  "name": "blockchain",
+  "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "private": true,
   "scripts": {
     "test:contracts": "npx hardhat test --network hardhat",
     "test:parallel": "npx hardhat test --network hardhat --parallel",
