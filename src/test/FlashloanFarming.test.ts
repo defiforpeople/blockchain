@@ -1,21 +1,22 @@
 import {
   // eslint-disable-next-line camelcase
   IPool__factory,
-  TestingAave,
+  FlashloanFarming,
   // eslint-disable-next-line camelcase
   FlashLoanSimpleReceiverBase__factory,
 } from "../typechain";
 import { expect, use } from "chai";
 import { ethers } from "hardhat";
+import "@nomiclabs/hardhat-ethers";
 import { deployMockContract, MockContract } from "ethereum-waffle";
 import { waffleChai } from "@ethereum-waffle/chai";
-import { BigNumber, Wallet } from "ethers";
+import { Wallet } from "ethers";
 use(waffleChai);
 
-describe("TestingAave", function () {
+describe("FlashloanFarming", function () {
   let ownerWallet: Wallet;
   let poolMockContract: MockContract;
-  let testingAaveContract: TestingAave;
+  let FlashloanFarmingContract: FlashloanFarming;
   let flashLoanSimpleReceiverBaseContract: MockContract;
 
   beforeEach(async () => {
@@ -43,21 +44,26 @@ describe("TestingAave", function () {
     await flashLoanSimpleReceiverBaseContract.deployed();
 
     // deploy Greeter contract
-    const TestingAave = await ethers.getContractFactory("TestingAave");
-    testingAaveContract = (
-      await TestingAave.deploy(poolMockContract.address)
-    ).connect(ownerWallet) as TestingAave;
-    await testingAaveContract.deployed();
+    const FlashloanFarming = await ethers.getContractFactory(
+      "FlashloanFarming"
+    );
+    FlashloanFarmingContract = (
+      await FlashloanFarming.deploy(poolMockContract.address)
+    ).connect(ownerWallet) as FlashloanFarming;
+    await FlashloanFarmingContract.deployed();
   });
 
-  it("Check the balance of interacting with 'flashloan' function of 'TestingAave' contract before, after and at the moment of executing the flashloan", async () => {
+  it("Check the balance of interacting with 'flashloan' function of 'FlashloanFarming' contract before, after and at the moment of executing the flashloan", async () => {
     const amount = ethers.utils.parseEther("0.5");
     const tokenAddress = ethers.constants.AddressZero;
     await poolMockContract.mock.flashLoanSimple
       // .withArgs(ownerWallet, tokenAddress, amount, "", 0)
       .returns(amount);
 
-    const balance = await testingAaveContract.flashloan(tokenAddress, amount);
+    const balance = await FlashloanFarmingContract.flashloan(
+      tokenAddress,
+      amount
+    );
 
     expect(balance).to.equal(balance);
   });
