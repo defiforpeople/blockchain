@@ -23,7 +23,7 @@ module.exports = {
     "node/no-unpublished-import": [
       "error",
       {
-        allowModules: ["chai"],
+        allowModules: ["chai", "@nomiclabs/hardhat-ethers", "ethers"],
       },
     ],
     "node/no-missing-import": [
