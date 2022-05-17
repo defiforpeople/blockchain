@@ -1,7 +1,7 @@
-node_modules
-package-lock.json
+node_modules/
 
 .env
+.env.*
 dist
 coverage
 coverage.json
@@ -11,3 +11,7 @@ typechain
 cache
 artifacts
 frpc.ini
+.vscode/
+scripts/node_modules/
+flatten/
+build/

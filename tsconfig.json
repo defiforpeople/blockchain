@@ -4,6 +4,7 @@
     "module": "commonjs",
     "strict": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "outDir": "dist",
     "baseUrl": "src",
     "declaration": true,
@@ -11,6 +12,5 @@
   },
   "compileOnsave": false,
   "autoFixOnSave": true,
-  "include": ["./src/scripts", "./src/test", "./src/typechain"],
   "files": ["./hardhat.config.ts"]
 }
