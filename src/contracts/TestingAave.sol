@@ -5,8 +5,11 @@ pragma solidity ^0.8.10;
 import {FlashLoanSimpleReceiverBase} from "@aave/core-v3/contracts/flashloan/base/FlashLoanSimpleReceiverBase.sol";
 import {IPoolAddressesProvider} from "@aave/core-v3/contracts/interfaces/IPoolAddressesProvider.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeMath} from "@aave/core-v3/contracts/dependencies/openzeppelin/contracts/SafeMath.sol";
 
 contract TestingAave is FlashLoanSimpleReceiverBase {
+    using SafeMath for uint256;
+
     constructor(IPoolAddressesProvider _addressProvider)
         FlashLoanSimpleReceiverBase(_addressProvider)
     {}
@@ -18,7 +21,7 @@ contract TestingAave is FlashLoanSimpleReceiverBase {
         address initiator,
         bytes calldata params
     ) external returns (bool) {
-        uint256 amountOwing = amount + premium;
+        uint256 amountOwing = amount.add(premium);
         IERC20(asset).approve(address(POOL), amountOwing);
 
         return true;
@@ -26,7 +29,7 @@ contract TestingAave is FlashLoanSimpleReceiverBase {
 
     function flashloan(address _asset, uint256 _amount)
         external
-        returns (uint256)
+        returns (bool)
     {
         address receiverAddress = address(this);
         bytes memory params = "";
@@ -39,7 +42,7 @@ contract TestingAave is FlashLoanSimpleReceiverBase {
             referralCode
         );
 
-        return address(this).balance;
+        return true;
     }
 
     // function ADDRESSES_PROVIDER()
