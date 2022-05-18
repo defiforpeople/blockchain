@@ -17,42 +17,15 @@ contract Main is Ownable {
     mapping(address => Strategy) private _strategies;
     EnumerableSet.AddressSet private _strategiesAddrs;
 
-    event Deposit(
-        address indexed userAddr,
-        address indexed strategyAddr,
-        uint256 amount
-    );
-    event Withdraw(
-        address indexed userAddr,
-        address indexed strategyAddr,
-        uint256 amount
-    );
     event AddStrategy(address indexed strategyAddr, string name);
     event DeleteStrategy(address indexed strategyAddr);
 
     constructor() {}
 
-    function deposit(address strategyAddr, uint256 amount)
-        external
-        returns (bool)
-    {
-        emit Deposit(msg.sender, strategyAddr, amount);
-        return true;
-    }
-
-    function withdraw(address strategyAddr, uint256 amount)
-        external
-        returns (bool)
-    {
-        emit Withdraw(msg.sender, strategyAddr, amount);
-        return true;
-    }
-
     function addStrategy(address addr, string memory name) external {
         Strategy storage s = _strategies[addr];
         s.name = name;
         s.addr = addr;
-
         _strategiesAddrs.add(addr);
 
         emit AddStrategy(addr, name);
@@ -60,7 +33,6 @@ contract Main is Ownable {
 
     function deleteStrategy(address addr) external {
         delete _strategies[addr];
-
         _strategiesAddrs.remove(addr);
 
         emit DeleteStrategy(addr);
@@ -85,6 +57,8 @@ contract Main is Ownable {
 
         return (names, addrs);
     }
+
+    // function getDeposits(address userAddress)
 
     function getCuotaByStrategy(address strategyAddr)
         external
