@@ -8,4 +8,6 @@ interface IStrategy {
         returns (uint256);
 
     function getQuotaPrice() external view returns (uint256);
+
+    // function getUserQuotas(address userAddr) external view returns (uint256);
 }
