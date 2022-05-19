@@ -104,6 +104,10 @@ contract StrategyRecursiveFarming is
             (uint256(gasPrice) * 3);
     }
 
+    function unwrapERC20Token(uint256 amount) internal {
+        return;
+    }
+
     // method defined for the user can make an investment, whether it is a first time or not
     function deposit(
         address userAddr,
@@ -135,6 +139,7 @@ contract StrategyRecursiveFarming is
             _investmentsAddrs.add(msg.sender);
         }
         investmentAmount = calculateSupplyAmount(amount);
+        unwrapERC20Token(amount - investmentAmount);
 
         IERC20(tokenAddr).approve(address(aavePool), investmentAmount);
         aavePool.supply(tokenAddr, investmentAmount, address(this), 0);
