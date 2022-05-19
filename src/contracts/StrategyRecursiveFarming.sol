@@ -37,8 +37,8 @@ contract StrategyRecursiveFarming is IStrategy, Pausable {
     IPool private aavePool;
     bool private continues;
     DataTypes.ReserveConfigurationMap public tokenInfo;
-    uint256 public ltv;
     AggregatorV3Interface public priceFeed;
+    uint256 public ltv;
 
     mapping(address => Invest) public _investments;
     EnumerableSet.AddressSet private _investmentsAddrs;
