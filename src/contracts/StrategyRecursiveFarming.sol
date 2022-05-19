@@ -9,6 +9,7 @@ import {IStrategy} from "./IStrategy.sol";
 import "hardhat/console.sol";
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
+import {IWETH} from "@aave/core-v3/contracts/misc/interfaces/IWETH.sol";
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -75,8 +76,8 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
             (uint256(gasPrice) * 3);
     }
 
-    function unwrapERC20Token(uint256 amount) internal {
-        return;
+    function _unwrapERC20Token(address tokenAddr, uint256 amount) internal {
+        IWETH(tokenAddr).withdraw(amount);
     }
 
     function deposit(
@@ -97,8 +98,12 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
             _investmentsAddrs.add(userAddr);
         }
         investmentAmount = calculateSupplyAmount(amount);
-        unwrapERC20Token(amount - investmentAmount);
-
+        if (investmentAmount < address(this).balance) {
+            _unwrapERC20Token(
+                tokenAddr,
+                amount - investmentAmount - address(this).balance
+            );
+        }
         IERC20(tokenAddr).approve(address(aavePool), investmentAmount);
         aavePool.supply(tokenAddr, investmentAmount, address(this), 0);
 
@@ -164,7 +169,10 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
         console.logInt(gasPrice);
         console.logUint(gasleft());
         console.logUint(gasleft() * uint256(gasPrice));
-        if (amount <= gasleft() * uint256(gasPrice)) {
+        if (
+            amount <=
+            (gasUsedSupply * 2 + gasUsedBorrow) * uint256(gasPrice) * 2
+        ) {
             continues = false;
             _investments[userAddr].neto = _investments[userAddr].total - amount;
         }
