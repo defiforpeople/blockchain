@@ -47,8 +47,8 @@ contract StrategyRecursiveFarming is
     IPool private aavePool;
     bool private continues;
     DataTypes.ReserveConfigurationMap public tokenInfo;
-    uint256 public ltv;
     AggregatorV3Interface public priceFeed;
+    uint256 public ltv;
 
     // define investments information
     mapping(address => Invest) public _investments;
