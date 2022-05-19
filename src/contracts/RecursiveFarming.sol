@@ -26,13 +26,13 @@ contract StrategyRecursiveFarming is
     AggregatorV3Interface private priceFeed;
     uint256 private ltv;
     uint256 private investmentAmount;
-    uint256 private constant gasUsedDeposit = 1074040;
-    uint256 private constant gasUsedSupply = 10740;
-    uint256 private constant gasUsedBorrow = 10740;
+    uint256 private constant GAS_USED_DEPOSIT = 1074040;
+    uint256 private constant GAS_USED_SUPPLY = 10740;
+    uint256 private constant GAS_USED_BORROW = 10740;
 
-    constructor(address _aavePoolAddr, address _priceFeedAddress) {
+    constructor(address _aavePoolAddr, address _gasPriceFeedAddress) {
         aavePool = IPool(_aavePoolAddr);
-        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+        gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddress);
     }
 
     enum StrategyStatus {
@@ -75,16 +75,19 @@ contract StrategyRecursiveFarming is
     // timestamp save the last time a contract loop was executed
     uint256 public lastTimestamp;
 
-    // define contracts events
-    event Deposit(address userAddr, address tokenAddr, uint256 quotas);
-    event Withdraw(address userAddr, address tokenAddr, uint256 quotas);
-
     constructor(address _aavePoolAddr, address _priceFeedAddress) {
         lastTimestamp = block.timestamp;
         aavePool = IPool(_aavePoolAddr);
         priceFeed = AggregatorV3Interface(_priceFeedAddress);
     }
 
+    // define contracts events
+    event Deposit(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount,
+        uint256 quotas
+    );
     event Borrow(address userAddr, address tokenAddr, uint256 amount);
     event Supply(
         address userAddr,
@@ -92,21 +95,49 @@ contract StrategyRecursiveFarming is
         uint256 amount,
         bool continues
     );
+    event Withdraw(address userAddr, address tokenAddr, uint256 quotas);
 
+    // method for calculating supply amount, by substracting the gas amount estimation
     function calculateSupplyAmount(uint256 totalAmount)
         internal
         view
         returns (uint256)
     {
-        (, int256 gasPrice, , , ) = priceFeed.latestRoundData();
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
         return
             (totalAmount + gasUsedBorrow + gasUsedDeposit + gasUsedSupply) *
             (uint256(gasPrice) * 3);
     }
 
+    // method for unwrap the ERC20 into the native token, in order to pay gas with that
     function _unwrapERC20Token(address tokenAddr, uint256 amount) internal {
         IWETH(tokenAddr).withdraw(amount);
+    }
+
+    // method for getting the Loan To Value (LTV) of the asset
+    function getLTV(address tokenAddr) internal returns (uint256) {
+        tokenInfo = aavePool.getConfiguration(tokenAddr);
+        // TODO(nb): Parse ltv from tokenInfo or change implementation
+        ltv = 200000; // tokenInfo[:15]
+        return ltv;
+    }
+
+    function _getCuotaQty(address tokenAddr, uint256 amount)
+        internal
+        view
+        returns (uint256)
+    {
+        IERC20 token = IERC20(tokenAddr);
+        console.log("balance: ", token.balanceOf(address(this)));
+
+        uint256 qty = amount / _getCuotaPrice();
+
+        return qty;
+    }
+
+    function _getCuotaPrice() internal pure returns (uint256) {
+        return 0;
     }
 
     // method defined for the user can make an investment, whether it is a first time or not
@@ -125,8 +156,6 @@ contract StrategyRecursiveFarming is
             "balance is not enough"
         );
 
-        Invest storage i = _investments[userAddr];
-
         // get current investment by user address
         Invest storage i = _investments[msg.sender];
 
@@ -139,25 +168,61 @@ contract StrategyRecursiveFarming is
 
             _investmentsAddrs.add(msg.sender);
         }
+
         investmentAmount = calculateSupplyAmount(amount);
-        if (investmentAmount < address(this).balance) {
+        // check if we have enough amount for paying gas
+        if (amount - investmentAmount < address(this).balance) {
+            // if we don't, we'll unwrap the necessary gas amount of the ERC20 token
             _unwrapERC20Token(
                 tokenAddr,
                 amount - investmentAmount - address(this).balance
             );
         }
-        IERC20(tokenAddr).approve(address(aavePool), investmentAmount);
+        // approve and supply liquidity to the protocol
+        token.approve(address(aavePool), investmentAmount);
         aavePool.supply(tokenAddr, investmentAmount, address(this), 0);
 
-        tokenInfo = aavePool.getConfiguration(tokenAddr);
-        // TODO(nb): Parse ltv from tokenInfo or change implmenetation
-        ltv = 200000; // tokenInfo[:15]
+        // get the LTV value for the function borrow() to work correctly
+        ltv = getLTV(tokenAddr);
         emit Deposit(address(this), tokenAddr, investmentAmount);
+    }
+
+    function borrow(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount
+    ) external {
+        aavePool.borrow(tokenAddr, amount * ltv, 2, 0, address(this));
+        emit Borrow(userAddr, tokenAddr, amount * ltv);
+    }
+
+    function supply(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount
+    ) external {
+        continues = true;
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+        console.logInt(gasPrice);
+        console.logUint(gasleft());
+        console.logUint(gasleft() * uint256(gasPrice));
+        if (
+            amount <=
+            (gasUsedSupply * 2 + gasUsedBorrow) * uint256(gasPrice) * 2
+        ) {
+            continues = false;
+            _investments[userAddr].neto = _investments[userAddr].total - amount;
+        }
+
+        IERC20(tokenAddr).approve(address(aavePool), amount);
+        aavePool.supply(tokenAddr, amount, address(this), 0);
+
+        emit Supply(userAddr, tokenAddr, amount, continues);
     }
 
     // method defined for the user can withdraw from the strategy
     function withdraw(
-        address userAddr,
+        address userAddr, // @nb: Can we avoid this param using msg.sender??
         address tokenAddr,
         uint256 quotas
     ) external payable {
@@ -183,6 +248,7 @@ contract StrategyRecursiveFarming is
         emit Withdraw(userAddr, tokenAddr, quotas);
     }
 
+    // @nb: if we use only the native token, we don't need this 2 functions
     // method defined to add support to a new erc20 token for the strategy
     function addToken(
         string memory name,
@@ -204,56 +270,6 @@ contract StrategyRecursiveFarming is
         delete _tokens[tokenAddr];
 
         _tokensAddrs.remove(tokenAddr);
-    }
-
-    function borrow(
-        address userAddr,
-        address tokenAddr,
-        uint256 amount
-    ) external {
-        aavePool.borrow(tokenAddr, amount * ltv, 2, 0, address(this));
-        emit Borrow(userAddr, tokenAddr, amount * ltv);
-    }
-
-    function supply(
-        address userAddr,
-        address tokenAddr,
-        uint256 amount
-    ) external {
-        continues = true;
-        (, int256 gasPrice, , , ) = priceFeed.latestRoundData();
-        console.logInt(gasPrice);
-        console.logUint(gasleft());
-        console.logUint(gasleft() * uint256(gasPrice));
-        if (
-            amount <=
-            (gasUsedSupply * 2 + gasUsedBorrow) * uint256(gasPrice) * 2
-        ) {
-            continues = false;
-            _investments[userAddr].neto = _investments[userAddr].total - amount;
-        }
-
-        IERC20(tokenAddr).approve(address(aavePool), amount);
-        aavePool.supply(tokenAddr, amount, address(this), 0);
-
-        emit Supply(userAddr, tokenAddr, amount, continues);
-    }
-
-    function _getCuotaQty(address tokenAddr, uint256 amount)
-        internal
-        view
-        returns (uint256)
-    {
-        IERC20 token = IERC20(tokenAddr);
-        console.log("balance: ", token.balanceOf(address(this)));
-
-        uint256 qty = amount / _getCuotaPrice();
-
-        return qty;
-    }
-
-    function _getCuotaPrice() internal pure returns (uint256) {
-        return 0;
     }
 
     function getQuotaQty(address tokenAddr, uint256 amount)
