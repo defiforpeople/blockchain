@@ -5,13 +5,10 @@ import { StrategyRecursiveFarming } from "../../typechain";
 const logger = require("pino")();
 
 const GAS_LIMIT = 2074040;
-
-export async function listen(strategyAddress: string) {
-  let continueLoop: boolean;
-  let tokenAddress: string;
-
-  const [wallet] = await ethers.getSigners();
-
+export async function listen(
+  strategyAddress: string,
+  walletAddress: string
+): Promise<void> {
   const strategyContract = ethers.getContractFactory(
     "StrategyRecursiveFarming"
   );
@@ -22,12 +19,15 @@ export async function listen(strategyAddress: string) {
   strategy.on(
     "Deposit",
     async (userAddr: string, tokenAddr: string, amount: BigNumber, ev: any) => {
-      tokenAddress = tokenAddr;
-      const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount, {
-        from: `${wallet.address}`,
-        gasLimit: GAS_LIMIT,
-      });
-      borrowTx.wait();
+      try {
+        const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount, {
+          from: walletAddress,
+          gasLimit: GAS_LIMIT,
+        });
+        await borrowTx.wait();
+      } catch (err) {
+        logger.error(err);
+      }
     }
   );
 
@@ -35,25 +35,40 @@ export async function listen(strategyAddress: string) {
     "Borrow",
     async (
       userAddr: string,
+      tokenAddr: string,
       amount: BigNumber,
-      continues: boolean,
       ev: any
-    ) => {
-      continueLoop = continues;
-      strategy.supply(tokenAddress, amount, {
-        from: `${wallet.address}`,
-        gasLimit: GAS_LIMIT,
-      });
-      if (!continueLoop) {
-        process.exitCode(1);
+    ): Promise<void> => {
+      try {
+        const supplyTx = await strategy.supply(userAddr, tokenAddr, amount, {
+          from: walletAddress,
+          gasLimit: GAS_LIMIT,
+        });
+        await supplyTx.wait();
+      } catch (err) {
+        logger.error(err);
       }
     }
   );
 
   strategy.on(
     "Supply",
-    async (userAddr: string, amount: BigNumber, ev: any) => {
-      strategy.borrow(userAddr, tokenAddress, amount);
+    async (
+      userAddr: string,
+      tokenAddr: string,
+      amount: BigNumber,
+      continues: boolean,
+      ev: any
+    ): Promise<void> => {
+      try {
+        if (!continues) {
+          return;
+        }
+        const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount);
+        await borrowTx.wait();
+      } catch (err) {
+        logger.error(err);
+      }
     }
   );
 }
