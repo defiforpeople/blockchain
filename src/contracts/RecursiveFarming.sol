@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
-import "./IStrategy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
+import {IStrategy} from "./IStrategy.sol";
 import "hardhat/console.sol";
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
@@ -20,6 +19,16 @@ contract StrategyRecursiveFarming is
     KeeperCompatibleInterface
 {
     using EnumerableSet for EnumerableSet.AddressSet;
+    IPool private aavePool;
+    bool private continues;
+    DataTypes.ReserveConfigurationMap public tokenInfo;
+    AggregatorV3Interface public priceFeed;
+    uint256 public ltv;
+
+    constructor(address _aavePoolAddr, address _priceFeedAddress) {
+        aavePool = IPool(_aavePoolAddr);
+        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+    }
 
     enum StrategyStatus {
         Pristine,
@@ -65,14 +74,19 @@ contract StrategyRecursiveFarming is
     event Deposit(address userAddr, address tokenAddr, uint256 quotas);
     event Withdraw(address userAddr, address tokenAddr, uint256 quotas);
 
-    event Borrow(address userAddr, uint256 amount, bool continues);
-    event Supply(address userAddr, uint256 amount);
-
     constructor(address _aavePoolAddr, address _priceFeedAddress) {
         lastTimestamp = block.timestamp;
         aavePool = IPool(_aavePoolAddr);
         priceFeed = AggregatorV3Interface(_priceFeedAddress);
     }
+
+    event Borrow(address userAddr, address tokenAddr, uint256 amount);
+    event Supply(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount,
+        bool continues
+    );
 
     // method defined for the user can make an investment, whether it is a first time or not
     function deposit(address tokenAddr, uint256 amount) external payable {
@@ -100,8 +114,9 @@ contract StrategyRecursiveFarming is
         }
 
         tokenInfo = aavePool.getConfiguration(tokenAddr);
+        // TODO(nb): Parse ltv from tokenInfo or change implmenetation
         ltv = 200000; // tokenInfo[:15]
-        emit Deposit(msg.sender, tokenAddr, amount);
+        emit Deposit(address(this), tokenAddr, amount);
     }
 
     // method defined for the user can withdraw from the strategy
@@ -160,6 +175,15 @@ contract StrategyRecursiveFarming is
         address tokenAddr,
         uint256 amount
     ) external {
+        aavePool.borrow(tokenAddr, amount * ltv, 2, 0, address(this));
+        emit Borrow(userAddr, tokenAddr, amount * ltv);
+    }
+
+    function supply(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount
+    ) external {
         continues = true;
         (, int256 gasPrice, , , ) = priceFeed.latestRoundData();
         console.logInt(gasPrice);
@@ -167,18 +191,13 @@ contract StrategyRecursiveFarming is
         console.logUint(gasleft() * uint256(gasPrice));
         if (amount <= gasleft() * uint256(gasPrice)) {
             continues = false;
+            _investments[userAddr].neto = _investments[userAddr].total - amount;
         }
 
-        aavePool.borrow(tokenAddr, amount * ltv, 2, 0, address(this));
-        emit Borrow(userAddr, amount * ltv, continues);
-        // Another implementation is that borrow returns continues, then supply takes
-        //  it and emits in the event. So it won't be necessary store the value on off-chain memory. But probably inefficient.
-    }
-
-    function supply(address tokenAddr, uint256 amount) external {
+        IERC20(tokenAddr).approve(address(aavePool), amount);
         aavePool.supply(tokenAddr, amount, address(this), 0);
-        emit Supply(address(this), amount);
-        // Other impl: emit Supply(address(this), amount, continues);
+
+        emit Supply(userAddr, tokenAddr, amount, continues);
     }
 
     function _getCuotaQty(address tokenAddr, uint256 amount)
