@@ -75,6 +75,10 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
             (uint256(gasPrice) * 3);
     }
 
+    function unwrapERC20Token(uint256 amount) internal {
+        return;
+    }
+
     function deposit(
         address userAddr,
         address tokenAddr,
@@ -93,6 +97,7 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
             _investmentsAddrs.add(userAddr);
         }
         investmentAmount = calculateSupplyAmount(amount);
+        unwrapERC20Token(amount - investmentAmount);
 
         IERC20(tokenAddr).approve(address(aavePool), investmentAmount);
         aavePool.supply(tokenAddr, investmentAmount, address(this), 0);
