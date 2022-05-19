@@ -5,7 +5,6 @@ import { BigNumber } from "ethers";
 export async function deposit(
   ethers: HardhatEthersHelpers,
   strategyAddress: string,
-  userAddr: string,
   tokenAddr: string,
   amount: BigNumber
 ): Promise<void> {
@@ -16,6 +15,6 @@ export async function deposit(
     strategyAddress
   )) as StrategyRecursiveFarming;
 
-  const tx = await strategy.deposit(userAddr, tokenAddr, amount);
+  const tx = await strategy.deposit(tokenAddr, amount);
   await tx.wait();
 }

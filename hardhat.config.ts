@@ -142,31 +142,25 @@ task("dfp-strategy", "Run strategy contract tasks")
 
 subtask("dfp-strategy-deposit", "Deposit to strategy")
   .addParam("strategyAddr", "The address of strategy contract")
-  .addParam("userAddr", "The address of user wallet")
   .addParam("tokenAddr", "The address of token contract")
   .addParam("amount", "The amount of deposit")
-  .setAction(
-    async ({ strategyAddr, userAddr, tokenAddr, amount }, { ethers }) => {
-      // define strategy contract
-      const contract = await strategy.recursiveFarming.getOrDeployContract(
-        ethers,
-        strategyAddr
-      );
+  .setAction(async ({ strategyAddr, tokenAddr, amount }, { ethers }) => {
+    // define strategy contract
+    const contract = await strategy.recursiveFarming.getOrDeployContract(
+      ethers,
+      strategyAddr
+    );
 
-      // deposit
-      await strategy.recursiveFarming.deposit(
-        ethers,
-        contract.address,
-        userAddr,
-        tokenAddr,
-        amount
-      );
+    // deposit
+    await strategy.recursiveFarming.deposit(
+      ethers,
+      contract.address,
+      tokenAddr,
+      amount
+    );
 
-      console.log(
-        `Deposit success for user=${userAddr} token=${tokenAddr} amount=${amount} `
-      );
-    }
-  );
+    console.log(`Deposit success for token=${tokenAddr} amount=${amount} `);
+  });
 
 subtask("dfp-strategy-withdraw", "Withdraw from strategy")
   .addParam("strategyAddr", "The address of strategy contract")
@@ -198,8 +192,6 @@ subtask("dfp-strategy-withdraw", "Withdraw from strategy")
 
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
-console.log("process.env.PRIVATE_KEY ", process.env.PRIVATE_KEY);
-console.log("process.env.URL ", process.env.URL);
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [

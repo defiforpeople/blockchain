@@ -27,6 +27,7 @@
   "homepage": "https://github.com/defiforpeople/strategy-recursive-yield-farming#readme",
   "devDependencies": {
     "@aave/core-v3": "github:aave/aave-v3-core",
+    "@chainlink/contracts": "^0.4.1",
     "@ethereum-waffle/chai": "^3.4.4",
     "@nomiclabs/hardhat-ethers": "^2.0.6",
     "@nomiclabs/hardhat-etherscan": "^3.0.3",

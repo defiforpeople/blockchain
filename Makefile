@@ -11,19 +11,29 @@ endif
 VERSION=$$(npm view package.json version)
 FRP_PID=$$(ps | grep './assets/$(FRP_BIN) -c ./frpc.ini' | grep -v '/bin/sh' | grep -v 'grep' | head -n 1 | awk '{print $$1}')
 
-install:
+prepare:
+	@echo "[prepare] Preparing repository..."
+	@cp .env.example .env
+	@cp frpc.ini.example frpc.ini
+
+install: prepare
 	@echo "[install] Installing dependencies..."
 	@npm install
-	@cp .env.example .env
-	@cp .frpc.ini.example .frpc.ini
 
 typescript: clean
 	@echo "[typescript] Transpiling code..."
 	@npm run typescript
 
 clean:
-	@echo "[clean] Cleaning dist folder..."
-	@rm -rf dist/
+	@echo "[clean] Cleaning..."
+	@rm -rf dist
+	@rm -rf src/artifacts
+	@rm -rf src/cache
+	@rm -rf src/typechain
+
+compile: clean
+	@echo "[compile] Compiling the contracts..."
+	@TS_NODE_TRANSPILE_ONLY=true npx hardhat typechain
 
 linter:
 	@echo "[linter] Running linter..."
@@ -58,7 +68,7 @@ stop:
 		echo "[stop] no frp service to stop";\
   fi
 	@if [ "$(FRP_PID)" != "" ]; then\
-		echo "[stop] stopping reverse proxy";\
+		echo "[stop] stopping reverse proxy, run command again";\
     kill -9 $(FRP_PID);\
   fi
 
