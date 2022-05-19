@@ -23,7 +23,7 @@ contract StrategyRecursiveFarming is
     IPool private aavePool;
     bool private continues;
     DataTypes.ReserveConfigurationMap private tokenInfo;
-    AggregatorV3Interface private priceFeed;
+    AggregatorV3Interface private gasPriceFeed;
     uint256 private ltv;
     uint256 private investmentAmount;
     uint256 private constant GAS_USED_DEPOSIT = 1074040;
@@ -31,6 +31,7 @@ contract StrategyRecursiveFarming is
     uint256 private constant GAS_USED_BORROW = 10740;
 
     constructor(address _aavePoolAddr, address _gasPriceFeedAddress) {
+        lastTimestamp = block.timestamp;
         aavePool = IPool(_aavePoolAddr);
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddress);
     }
@@ -58,12 +59,6 @@ contract StrategyRecursiveFarming is
         address priceFeedAddr;
     }
 
-    IPool private aavePool;
-    bool private continues;
-    DataTypes.ReserveConfigurationMap public tokenInfo;
-    AggregatorV3Interface public priceFeed;
-    uint256 public ltv;
-
     // define investments information
     mapping(address => Invest) public _investments;
     EnumerableSet.AddressSet private _investmentsAddrs;
@@ -74,12 +69,6 @@ contract StrategyRecursiveFarming is
 
     // timestamp save the last time a contract loop was executed
     uint256 public lastTimestamp;
-
-    constructor(address _aavePoolAddr, address _priceFeedAddress) {
-        lastTimestamp = block.timestamp;
-        aavePool = IPool(_aavePoolAddr);
-        priceFeed = AggregatorV3Interface(_priceFeedAddress);
-    }
 
     // define contracts events
     event Deposit(
@@ -106,8 +95,10 @@ contract StrategyRecursiveFarming is
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
         return
-            (totalAmount + gasUsedBorrow + gasUsedDeposit + gasUsedSupply) *
-            (uint256(gasPrice) * 3);
+            (totalAmount +
+                GAS_USED_BORROW +
+                GAS_USED_DEPOSIT +
+                GAS_USED_DEPOSIT) * (uint256(gasPrice) * 3);
     }
 
     // method for unwrap the ERC20 into the native token, in order to pay gas with that
@@ -184,7 +175,7 @@ contract StrategyRecursiveFarming is
 
         // get the LTV value for the function borrow() to work correctly
         ltv = getLTV(tokenAddr);
-        emit Deposit(address(this), tokenAddr, investmentAmount);
+        emit Deposit(userAddr, tokenAddr, investmentAmount, i.quotas);
     }
 
     function borrow(
@@ -208,7 +199,7 @@ contract StrategyRecursiveFarming is
         console.logUint(gasleft() * uint256(gasPrice));
         if (
             amount <=
-            (gasUsedSupply * 2 + gasUsedBorrow) * uint256(gasPrice) * 2
+            (GAS_USED_SUPPLY * 2 + GAS_USED_BORROW) * uint256(gasPrice) * 2
         ) {
             continues = false;
             _investments[userAddr].neto = _investments[userAddr].total - amount;
