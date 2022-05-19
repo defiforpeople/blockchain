@@ -5,10 +5,7 @@ import { StrategyRecursiveFarming } from "../../typechain";
 const logger = require("pino")();
 
 const GAS_LIMIT = 2074040;
-export async function listen(
-  strategyAddress: string,
-  walletAddress: string
-): Promise<void> {
+export async function listen(strategyAddress: string): Promise<void> {
   const strategyContract = ethers.getContractFactory(
     "StrategyRecursiveFarming"
   );
@@ -21,7 +18,7 @@ export async function listen(
     async (userAddr: string, tokenAddr: string, amount: BigNumber, ev: any) => {
       try {
         const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount, {
-          from: walletAddress,
+          from: strategy.address,
           gasLimit: GAS_LIMIT,
         });
         await borrowTx.wait();
@@ -41,7 +38,7 @@ export async function listen(
     ): Promise<void> => {
       try {
         const supplyTx = await strategy.supply(userAddr, tokenAddr, amount, {
-          from: walletAddress,
+          from: strategy.address,
           gasLimit: GAS_LIMIT,
         });
         await supplyTx.wait();
