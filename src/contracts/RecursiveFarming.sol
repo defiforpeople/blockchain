@@ -9,6 +9,10 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import "./IStrategy.sol";
 import "hardhat/console.sol";
+import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
+import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
+
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract StrategyRecursiveFarming is
     IStrategy,
@@ -40,8 +44,11 @@ contract StrategyRecursiveFarming is
         address priceFeedAddr;
     }
 
-    // define aave pool used for strategy
-    address private aavePoolAddr;
+    IPool private aavePool;
+    bool private continues;
+    DataTypes.ReserveConfigurationMap public tokenInfo;
+    uint256 public ltv;
+    AggregatorV3Interface public priceFeed;
 
     // define investments information
     mapping(address => Invest) public _investments;
@@ -58,8 +65,13 @@ contract StrategyRecursiveFarming is
     event Deposit(address userAddr, address tokenAddr, uint256 quotas);
     event Withdraw(address userAddr, address tokenAddr, uint256 quotas);
 
-    constructor() {
+    event Borrow(address userAddr, uint256 amount, bool continues);
+    event Supply(address userAddr, uint256 amount);
+
+    constructor(address _aavePoolAddr, address _priceFeedAddress) {
         lastTimestamp = block.timestamp;
+        aavePool = IPool(_aavePoolAddr);
+        priceFeed = AggregatorV3Interface(_priceFeedAddress);
     }
 
     // method defined for the user can make an investment, whether it is a first time or not
@@ -87,6 +99,8 @@ contract StrategyRecursiveFarming is
             _investmentsAddrs.add(msg.sender);
         }
 
+        tokenInfo = aavePool.getConfiguration(tokenAddr);
+        ltv = 200000; // tokenInfo[:15]
         emit Deposit(msg.sender, tokenAddr, amount);
     }
 
@@ -139,6 +153,32 @@ contract StrategyRecursiveFarming is
         delete _tokens[tokenAddr];
 
         _tokensAddrs.remove(tokenAddr);
+    }
+
+    function borrow(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount
+    ) external {
+        continues = true;
+        (, int256 gasPrice, , , ) = priceFeed.latestRoundData();
+        console.logInt(gasPrice);
+        console.logUint(gasleft());
+        console.logUint(gasleft() * uint256(gasPrice));
+        if (amount <= gasleft() * uint256(gasPrice)) {
+            continues = false;
+        }
+
+        aavePool.borrow(tokenAddr, amount * ltv, 2, 0, address(this));
+        emit Borrow(userAddr, amount * ltv, continues);
+        // Another implementation is that borrow returns continues, then supply takes
+        //  it and emits in the event. So it won't be necessary store the value on off-chain memory. But probably inefficient.
+    }
+
+    function supply(address tokenAddr, uint256 amount) external {
+        aavePool.supply(tokenAddr, amount, address(this), 0);
+        emit Supply(address(this), amount);
+        // Other impl: emit Supply(address(this), amount, continues);
     }
 
     function _getCuotaQty(address tokenAddr, uint256 amount)
