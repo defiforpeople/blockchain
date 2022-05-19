@@ -15,7 +15,13 @@ export async function listen(strategyAddress: string): Promise<void> {
 
   strategy.on(
     "Deposit",
-    async (userAddr: string, tokenAddr: string, amount: BigNumber, ev: any) => {
+    async (
+      userAddr: string,
+      tokenAddr: string,
+      amount: BigNumber,
+      quotas: BigNumber,
+      ev: any
+    ) => {
       try {
         const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount, {
           from: strategy.address,
