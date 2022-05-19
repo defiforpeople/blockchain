@@ -21,9 +21,13 @@ contract StrategyRecursiveFarming is
     using EnumerableSet for EnumerableSet.AddressSet;
     IPool private aavePool;
     bool private continues;
-    DataTypes.ReserveConfigurationMap public tokenInfo;
-    AggregatorV3Interface public priceFeed;
-    uint256 public ltv;
+    DataTypes.ReserveConfigurationMap private tokenInfo;
+    AggregatorV3Interface private priceFeed;
+    uint256 private ltv;
+    uint256 private investmentAmount;
+    uint256 private constant gasUsedDeposit = 1074040;
+    uint256 private constant gasUsedSupply = 10740;
+    uint256 private constant gasUsedBorrow = 10740;
 
     constructor(address _aavePoolAddr, address _priceFeedAddress) {
         aavePool = IPool(_aavePoolAddr);
@@ -88,8 +92,24 @@ contract StrategyRecursiveFarming is
         bool continues
     );
 
+    function calculateSupplyAmount(uint256 totalAmount)
+        internal
+        view
+        returns (uint256)
+    {
+        (, int256 gasPrice, , , ) = priceFeed.latestRoundData();
+
+        return
+            (totalAmount + gasUsedBorrow + gasUsedDeposit + gasUsedSupply) *
+            (uint256(gasPrice) * 3);
+    }
+
     // method defined for the user can make an investment, whether it is a first time or not
-    function deposit(address tokenAddr, uint256 amount) external payable {
+    function deposit(
+        address userAddr,
+        address tokenAddr,
+        uint256 amount
+    ) external payable {
         // check if token is supported by strategy
         require(_tokensAddrs.contains(tokenAddr), "invalid token");
 
@@ -99,6 +119,8 @@ contract StrategyRecursiveFarming is
             amount <= token.balanceOf(address(this)),
             "balance is not enough"
         );
+
+        Invest storage i = _investments[userAddr];
 
         // get current investment by user address
         Invest storage i = _investments[msg.sender];
@@ -112,11 +134,15 @@ contract StrategyRecursiveFarming is
 
             _investmentsAddrs.add(msg.sender);
         }
+        investmentAmount = calculateSupplyAmount(amount);
+
+        IERC20(tokenAddr).approve(address(aavePool), investmentAmount);
+        aavePool.supply(tokenAddr, investmentAmount, address(this), 0);
 
         tokenInfo = aavePool.getConfiguration(tokenAddr);
         // TODO(nb): Parse ltv from tokenInfo or change implmenetation
         ltv = 200000; // tokenInfo[:15]
-        emit Deposit(address(this), tokenAddr, amount);
+        emit Deposit(address(this), tokenAddr, investmentAmount);
     }
 
     // method defined for the user can withdraw from the strategy
