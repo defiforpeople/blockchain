@@ -16,9 +16,13 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
     IPool private aavePool;
     bool private continues;
-    DataTypes.ReserveConfigurationMap public tokenInfo;
-    AggregatorV3Interface public priceFeed;
-    uint256 public ltv;
+    DataTypes.ReserveConfigurationMap private tokenInfo;
+    AggregatorV3Interface private priceFeed;
+    uint256 private ltv;
+    uint256 private investmentAmount;
+    uint256 private constant gasUsedDeposit = 1074040;
+    uint256 private constant gasUsedSupply = 10740;
+    uint256 private constant gasUsedBorrow = 10740;
 
     constructor(address _aavePoolAddr, address _priceFeedAddress) {
         aavePool = IPool(_aavePoolAddr);
@@ -49,7 +53,7 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
     mapping(address => Token) public _tokens;
     EnumerableSet.AddressSet private _tokensAddrs;
 
-    event Deposit(address userAddr, address tokenAddr, uint256 quotas);
+    event Deposit(address userAddr, address tokenAddr, uint256 amount);
     event Withdraw(address userAddr, address tokenAddr, uint256 quotas);
     event Borrow(address userAddr, address tokenAddr, uint256 amount);
     event Supply(
@@ -58,6 +62,18 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
         uint256 amount,
         bool continues
     );
+
+    function calculateSupplyAmount(uint256 totalAmount)
+        internal
+        view
+        returns (uint256)
+    {
+        (, int256 gasPrice, , , ) = priceFeed.latestRoundData();
+
+        return
+            (totalAmount + gasUsedBorrow + gasUsedDeposit + gasUsedSupply) *
+            (uint256(gasPrice) * 3);
+    }
 
     function deposit(
         address userAddr,
@@ -76,11 +92,15 @@ contract StrategyRecursiveFarming is IStrategy, Pausable, Ownable {
 
             _investmentsAddrs.add(userAddr);
         }
+        investmentAmount = calculateSupplyAmount(amount);
+
+        IERC20(tokenAddr).approve(address(aavePool), investmentAmount);
+        aavePool.supply(tokenAddr, investmentAmount, address(this), 0);
 
         tokenInfo = aavePool.getConfiguration(tokenAddr);
         // TODO(nb): Parse ltv from tokenInfo or change implmenetation
         ltv = 200000; // tokenInfo[:15]
-        emit Deposit(address(this), tokenAddr, amount);
+        emit Deposit(address(this), tokenAddr, investmentAmount);
     }
 
     function withdraw(
