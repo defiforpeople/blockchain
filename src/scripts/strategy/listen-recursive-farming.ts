@@ -74,4 +74,44 @@ export async function listen(strategyAddress: string): Promise<void> {
       }
     }
   );
+
+  strategy.on(
+    "InitWithdraw",
+    async (
+      userAddr: string,
+      tokenAddr: string,
+      amount: BigNumber
+    ): Promise<void> => {
+      try {
+        const repayTx = await strategy.repayWithCollateral(tokenAddr, amount);
+        await repayTx.wait();
+
+        const withdrawTx = await strategy.withdraw(userAddr, tokenAddr, amount);
+        await withdrawTx.wait();
+      } catch (err) {
+        logger.error(err);
+      }
+    }
+  );
+
+  strategy.on(
+    "Withdraw",
+    async (
+      userAddr: string,
+      tokenAddr: string,
+      quotas: BigNumber
+    ): Promise<void> => {
+      try {
+        const transferTx = await strategy.transferUser(
+          userAddr,
+          tokenAddr,
+          quotas
+        );
+        await transferTx.wait();
+        return;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  );
 }
