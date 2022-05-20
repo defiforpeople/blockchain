@@ -29,6 +29,7 @@ contract StrategyRecursiveFarming is
     uint256 private constant GAS_USED_DEPOSIT = 1074040;
     uint256 private constant GAS_USED_SUPPLY = 10740;
     uint256 private constant GAS_USED_BORROW = 10740;
+    uint256 private constant INTEREST_RATE_MODE = 2;
 
     constructor(address _aavePoolAddr, address _gasPriceFeedAddress) {
         lastTimestamp = block.timestamp;
@@ -183,7 +184,13 @@ contract StrategyRecursiveFarming is
         address tokenAddr,
         uint256 amount
     ) external {
-        aavePool.borrow(tokenAddr, amount * ltv, 2, 0, address(this));
+        aavePool.borrow(
+            tokenAddr,
+            amount * ltv,
+            INTEREST_RATE_MODE,
+            0,
+            address(this)
+        );
         emit Borrow(userAddr, tokenAddr, amount * ltv);
     }
 
@@ -209,6 +216,11 @@ contract StrategyRecursiveFarming is
         aavePool.supply(tokenAddr, amount, address(this), 0);
 
         emit Supply(userAddr, tokenAddr, amount, continues);
+    }
+
+    // method for repay the borrow with collateral
+    function repayWithCollateral(address tokenAddr, uint256 amount) public {
+        aavePool.repayWithATokens(tokenAddr, amount, INTEREST_RATE_MODE);
     }
 
     // method defined for the user can withdraw from the strategy
@@ -237,6 +249,15 @@ contract StrategyRecursiveFarming is
         // TODO(ca): transfer amount (quota*price) to user address
 
         emit Withdraw(userAddr, tokenAddr, quotas);
+    }
+
+    function transferUser(
+        address userAddr,
+        address tokenAddr,
+        uint256 quotas
+    ) external {
+        // TODO: make quotas * amount calculation
+        IERC20(tokenAddr).transfer(userAddr, quotas);
     }
 
     // @nb: if we use only the native token, we don't need this 2 functions
