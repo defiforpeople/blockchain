@@ -9,6 +9,7 @@ export async function listen(strategyAddress: string): Promise<void> {
   const strategyContract = ethers.getContractFactory(
     "StrategyRecursiveFarming"
   );
+
   const strategy = (await strategyContract).attach(
     strategyAddress
   ) as StrategyRecursiveFarming;
