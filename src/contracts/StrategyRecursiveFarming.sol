@@ -17,20 +17,31 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 contract StrategyRecursiveFarming is
     IStrategy,
     Pausable,
-    KeeperCompatibleInterface
+    KeeperCompatibleInterface,
+    Ownable
 {
     using EnumerableSet for EnumerableSet.AddressSet;
+
+    // interfaces
     IERC20 public token;
     IPool private aavePool;
+    AggregatorV3Interface private gasPriceFeed;
+
+    // external
     DataTypes.ReserveConfigurationMap private tokenInfo;
     uint256 private ltv;
-    AggregatorV3Interface private gasPriceFeed;
-    bool private continues;
+
+    // internal
     uint256 private investmentAmount;
+    bool private continues;
+    StrategyStatus private status;
+
+    // contants
     uint256 private constant GAS_USED_DEPOSIT = 1074040;
     uint256 private constant GAS_USED_SUPPLY = 10740;
     uint256 private constant GAS_USED_BORROW = 10740;
-    uint256 private constant INTEREST_RATE_MODE = 2;
+    uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
+
     // timestamp save the last time a contract loop was executed
     uint256 public lastTimestamp;
 
@@ -46,8 +57,9 @@ contract StrategyRecursiveFarming is
     }
 
     enum StrategyStatus {
-        Pristine,
-        Active
+        Borrow,
+        Supply,
+        Done
     }
 
     enum InvestStatus {
@@ -56,10 +68,11 @@ contract StrategyRecursiveFarming is
     }
 
     struct Invest {
-        uint256 total;
-        uint256 neto;
-        uint256 quotas;
-        InvestStatus status;
+        // q.price[i] = 1100
+        uint256 total; // 1.000.000 => 600.000  (diff => quotas => 400k)
+        uint256 neto; // 1.000.000 (~999.990)
+        uint256 gas; //
+        uint256 quotas; // 200 (1ra iteración qp=1000), 202 (2da iteración qp=990), 202 (3da iteración qp=990), 200 (2da iteración qp=1000) , 181 (5ta iteración qp=1100) = 985 quotas
     }
 
     // define investments information
@@ -96,13 +109,19 @@ contract StrategyRecursiveFarming is
     function getLTV() internal returns (uint256) {
         tokenInfo = aavePool.getConfiguration(address(token));
         //tokenInfo = 5708990770823839524233143896245666479610309254976
+        // uint16 ltv = uint16(tokenInfo & FFFF) << 16;
+
         // TODO(nb): Parse ltv from tokenInfo or change implementation
         ltv = 200000; // tokenInfo[:15]
+
         return ltv;
     }
 
+    function setLTV(uint256 _ltv) external {
+        ltv = _ltv;
+    }
+
     function _getCuotaQty(uint256 amount) internal view returns (uint256) {
-        console.log("balance: ", token.balanceOf(address(this)));
         uint256 qty = amount / _getCuotaPrice();
         return qty;
     }
@@ -131,24 +150,29 @@ contract StrategyRecursiveFarming is
             _investmentsAddrs.add(msg.sender);
         }
 
-        investmentAmount = calculateSupplyAmount(amount);
         // check if we have enough amount for paying gas
+        investmentAmount = calculateSupplyAmount(amount);
+
+        // if we don't, we'll unwrap the necessary gas amount of the ERC20 token
         if (amount - investmentAmount < address(this).balance) {
-            // if we don't, we'll unwrap the necessary gas amount of the ERC20 token
             _unwrapERC20Token(
                 amount - investmentAmount - address(this).balance
             );
         }
+
         // approve and supply liquidity to the protocol
         token.approve(address(aavePool), investmentAmount);
         aavePool.supply(address(token), investmentAmount, address(this), 0);
 
         // get the LTV value for the function borrow() to work correctly
         ltv = getLTV();
+
+        status = StrategyStatus.Borrow;
+
         emit Deposit(userAddr, investmentAmount, i.quotas);
     }
 
-    function borrow(address userAddr, uint256 amount) external {
+    function borrow(address userAddr, uint256 amount) public {
         aavePool.borrow(
             address(token),
             amount * ltv,
@@ -156,21 +180,28 @@ contract StrategyRecursiveFarming is
             0,
             address(this)
         );
+
+        status = StrategyStatus.Supply;
         emit Borrow(userAddr, amount * ltv);
     }
 
-    function supply(address userAddr, uint256 amount) external {
+    function supply(address userAddr, uint256 amount) public {
         continues = true;
+
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
         console.logInt(gasPrice);
         console.logUint(gasleft());
         console.logUint(gasleft() * uint256(gasPrice));
+
         if (
             amount <=
             (GAS_USED_SUPPLY * 2 + GAS_USED_BORROW) * uint256(gasPrice) * 2
         ) {
             continues = false;
+            status = StrategyStatus.Done;
             _investments[userAddr].neto = _investments[userAddr].total - amount;
+        } else {
+            status = StrategyStatus.Supply;
         }
 
         token.approve(address(aavePool), amount);
@@ -237,17 +268,24 @@ contract StrategyRecursiveFarming is
             bytes memory /* performData */
         )
     {
-        // upkeepNeeded = (check if continue is true or not)
+        upkeepNeeded = continues;
     }
 
     function performUpkeep(
         bytes calldata /* performData */
     ) external override {
-        // if ((check if continue is true or not)) {
-        //     lastTimestamp = block.timestamp;
-        // }
-        // recursive farming loop
-        // _borrow()
-        // _supply()
+        if ((continues)) {
+            lastTimestamp = block.timestamp;
+        }
+
+        if (status == StrategyStatus.Borrow) {
+            // borrow(userAddr, amount);
+            return;
+        }
+
+        if (status == StrategyStatus.Supply) {
+            // supply((userAddr), amount);
+            return;
+        }
     }
 }
