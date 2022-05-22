@@ -15,15 +15,9 @@ export async function listen(strategyAddress: string): Promise<void> {
 
   strategy.on(
     "Deposit",
-    async (
-      userAddr: string,
-      tokenAddr: string,
-      amount: BigNumber,
-      quotas: BigNumber,
-      ev: any
-    ) => {
+    async (userAddr: string, amount: BigNumber, quotas: BigNumber, ev: any) => {
       try {
-        const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount, {
+        const borrowTx = await strategy.borrow(userAddr, amount, {
           from: strategy.address,
           gasLimit: GAS_LIMIT,
         });
@@ -36,14 +30,9 @@ export async function listen(strategyAddress: string): Promise<void> {
 
   strategy.on(
     "Borrow",
-    async (
-      userAddr: string,
-      tokenAddr: string,
-      amount: BigNumber,
-      ev: any
-    ): Promise<void> => {
+    async (userAddr: string, amount: BigNumber, ev: any): Promise<void> => {
       try {
-        const supplyTx = await strategy.supply(userAddr, tokenAddr, amount, {
+        const supplyTx = await strategy.supply(userAddr, amount, {
           from: strategy.address,
           gasLimit: GAS_LIMIT,
         });
@@ -58,7 +47,6 @@ export async function listen(strategyAddress: string): Promise<void> {
     "Supply",
     async (
       userAddr: string,
-      tokenAddr: string,
       amount: BigNumber,
       continues: boolean,
       ev: any
@@ -67,7 +55,7 @@ export async function listen(strategyAddress: string): Promise<void> {
         if (!continues) {
           return;
         }
-        const borrowTx = await strategy.borrow(userAddr, tokenAddr, amount);
+        const borrowTx = await strategy.borrow(userAddr, amount);
         await borrowTx.wait();
       } catch (err) {
         logger.error(err);
@@ -77,16 +65,12 @@ export async function listen(strategyAddress: string): Promise<void> {
 
   strategy.on(
     "InitWithdraw",
-    async (
-      userAddr: string,
-      tokenAddr: string,
-      amount: BigNumber
-    ): Promise<void> => {
+    async (userAddr: string, amount: BigNumber): Promise<void> => {
       try {
-        const repayTx = await strategy.repayWithCollateral(tokenAddr, amount);
+        const repayTx = await strategy.repayWithCollateral(amount);
         await repayTx.wait();
 
-        const withdrawTx = await strategy.withdraw(userAddr, tokenAddr, amount);
+        const withdrawTx = await strategy.withdraw(userAddr, amount);
         await withdrawTx.wait();
       } catch (err) {
         logger.error(err);
@@ -96,17 +80,9 @@ export async function listen(strategyAddress: string): Promise<void> {
 
   strategy.on(
     "Withdraw",
-    async (
-      userAddr: string,
-      tokenAddr: string,
-      quotas: BigNumber
-    ): Promise<void> => {
+    async (userAddr: string, quotas: BigNumber): Promise<void> => {
       try {
-        const transferTx = await strategy.transferUser(
-          userAddr,
-          tokenAddr,
-          quotas
-        );
+        const transferTx = await strategy.transferUser(userAddr, quotas);
         await transferTx.wait();
         return;
       } catch (err) {
