@@ -205,19 +205,19 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
 
     // method for withdraw and transfer tokens to the users
     function _withdraw(address userAdrr, uint256 amount) public {
-        aavePool.withdraw(address(token), amount * quotaPrice, userAdrr);
+        aavePool.withdraw(address(token), amount, userAdrr);
     }
 
-    function _getCuotaQty(address tokenAddr, uint256 amount)
-        internal
-        pure
+    function getQuotaQty(address tokenAddr, uint256 amount)
+        external
+        view
         returns (uint256)
     {
-        uint256 qty = amount / _getCuotaPrice();
+        uint256 qty = amount; //  / getCuotaPrice();
         return qty;
     }
 
-    function _getCuotaPrice() internal pure returns (uint256) {
+    function getQuotaPrice() external view returns (uint256) {
         return 0;
     }
 
