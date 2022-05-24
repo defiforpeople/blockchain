@@ -208,17 +208,16 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         aavePool.withdraw(address(token), amount * quotaPrice, userAdrr);
     }
 
-    function getQuotaQty(address tokenAddr, uint256 amount)
-        external
-        view
+    function _getCuotaQty(address tokenAddr, uint256 amount)
+        internal
+        pure
         returns (uint256)
     {
-        uint256 qty = amount; // / getCuotaPrice();
+        uint256 qty = amount / _getCuotaPrice();
         return qty;
     }
 
-    //TODO(nb): must be public, because I need to call it inside the sc
-    function getQuotaPrice() external view returns (uint256) {
+    function _getCuotaPrice() internal pure returns (uint256) {
         return 0;
     }
 
