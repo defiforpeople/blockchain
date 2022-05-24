@@ -15,6 +15,6 @@ export async function deposit(
     strategyAddress
   )) as StrategyRecursiveFarming;
 
-  const tx = await strategy.deposit(tokenAddr, amount);
+  const tx = await strategy.deposit(amount);
   await tx.wait();
 }
