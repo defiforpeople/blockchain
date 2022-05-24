@@ -15,8 +15,12 @@ import {IWETH} from "@aave/core-v3/contracts/misc/interfaces/IWETH.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 // IStrategy,
+<<<<<<< HEAD
 // KeeperCompatible
 contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
+=======
+contract StrategyRecursiveFarming is Pausable, Ownable, KeeperCompatible {
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
     // interfaces
     IERC20 public token;
     IPool private aavePool;
@@ -25,7 +29,11 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     // internal
     uint256 private investmentAmount;
     StrategyStatus private status;
+<<<<<<< HEAD
     uint256 private quotaPrice;
+=======
+    uint256 private _withdrawableAmount;
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
 
     // contants
     uint256 private constant GAS_USED_DEPOSIT = 1074040;
@@ -33,7 +41,10 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     uint256 private constant GAS_USED_BORROW = 10740;
     uint256 private constant GAS_PRICE_MULTIPLIER = 3;
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
+<<<<<<< HEAD
     uint16 private constant AAVE_REF_CODE = 0;
+=======
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
     // timestamp save the last time a contract loop was executed
     uint256 public lastTimestamp;
     uint256 public interval = 10 minutes;
@@ -55,6 +66,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     // define withdrawals information
     // Withdrawal[] public withdrawalQueue;
     // EnumerablesSet.AddresssSet private _investmentsAddrs;
+<<<<<<< HEAD
 
     // TODO(nb): Save this data in the mapping
     struct Invest {
@@ -98,6 +110,65 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         status = StrategyStatus.Borrow;
 
         // emit Deposit event
+=======
+
+    // TODO(nb): Save this data in the mapping
+    struct Invest {
+        uint256 amount;
+        uint256 timestamp;
+    }
+
+    // struct for withdrawalQueue array
+    struct Withdrawal {
+        address userAddress;
+        uint256 amount;
+    }
+
+    // status that marks the next step to do in the strategy for keeper
+    enum StrategyStatus {
+        Borrow,
+        Supply,
+        Done
+    }
+
+    // events for Deposit and Withdraw funcitons
+    event Deposit(address indexed userAddr, uint256 amount);
+    event Withdraw(address indexed userAddr, uint256 amount);
+
+    // define event for notify that more gas is needed
+    // event needGas(uint256 minGasNeeded)
+
+    // method for calculating supply amount, by substracting the gas amount estimation
+    function calculateSupplyAmount(uint256 totalAmount)
+        internal
+        view
+        returns (uint256)
+    {
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+        return
+            totalAmount -
+            ((GAS_USED_BORROW + GAS_USED_SUPPLY + GAS_USED_DEPOSIT) *
+                (uint256(gasPrice) * 3));
+    }
+
+    // method defined for the user to make an supply, and we save the investment amount with his address
+    function deposit(uint256 amount) external {
+        // transfer the user amount to this contract (user has to approve before this)
+        token.transferFrom(msg.sender, address(this), amount);
+
+        // check if we have enough amount for paying gas
+        investmentAmount = calculateSupplyAmount(amount);
+
+        // save investments in the mapping
+        _investments[msg.sender] += amount;
+
+        // approve and supply liquidity to the protocol
+        token.approve(address(aavePool), amount);
+        aavePool.supply(address(token), amount, address(this), 0);
+
+        status = StrategyStatus.Borrow;
+
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
         emit Deposit(msg.sender, amount);
     }
 
@@ -107,6 +178,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
             address(this)
         );
 
+<<<<<<< HEAD
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -116,6 +188,13 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
             (GAS_USED_DEPOSIT + GAS_USED_SUPPLY) *
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER
+=======
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        if (
+            borrowAvailable <
+            (GAS_USED_DEPOSIT + GAS_USED_SUPPLY) * uint256(gasPrice) * 3
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
         ) {
             status = StrategyStatus.Done;
             return;
@@ -131,6 +210,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
             address(this)
         );
 
+<<<<<<< HEAD
         // update status to the Supply (amount borrowed), that is the next step to do
         status = StrategyStatus.Supply;
     }
@@ -143,6 +223,20 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         if (
             token.balanceOf(address(this)) <
             GAS_USED_DEPOSIT * uint256(gasPrice) * GAS_PRICE_MULTIPLIER
+=======
+        // the next step is supplying the amount borrowed
+        status = StrategyStatus.Supply;
+    }
+
+    function supply() public {
+        // TODO(nb): add constants for gas multiplier
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        // check if we have enough amount for supplying
+        if (
+            token.balanceOf(address(this)) <
+            GAS_USED_DEPOSIT * uint256(gasPrice) * 3
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
         ) {
             status = StrategyStatus.Done;
             return;
@@ -152,6 +246,10 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         // the var amount will contain the WAVAX of the contract(what we borrowed before)
         uint256 amount = token.balanceOf(address(this));
 
+<<<<<<< HEAD
+=======
+        uint256 amount = token.balanceOf(address(this));
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
         // approve and supply liquidity
         token.approve(address(aavePool), amount);
         aavePool.supply(address(token), amount, address(this), AAVE_REF_CODE);
@@ -165,9 +263,22 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         return status;
     }
 
+<<<<<<< HEAD
     // method for executing the recursive loop based on the status of the strategy
     function doRecursion() external onlyOwner {
         require(status != StrategyStatus.Done, "The strategy is completed");
+=======
+        // update status to done, because the loop has finished
+        status = StrategyStatus.Done;
+        // emit CallKeeper();
+    }
+
+    function viewStatus() external view returns (StrategyStatus) {
+        return status;
+    }
+
+    function doRecursion() external {
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
         if (status == StrategyStatus.Borrow) {
             borrow();
         } else if (status == StrategyStatus.Supply) {
@@ -192,6 +303,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
             _investments[msg.sender] > 0 || _investments[msg.sender] >= amount,
             "No balance for requested amount"
         );
+<<<<<<< HEAD
 
         // TODO(nb): implement correctly the quotas calc flow
         // get the quota price for calc the amount to withdraw
@@ -247,5 +359,58 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
                 GAS_USED_DEPOSIT *
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER) - address(msg.sender).balance;
+=======
+
+        // repay the Aave loan with collateral
+        aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
+
+        // rest the amount repayed of investments
+        _investments[msg.sender] -= amount;
+
+        // update the status of strategy for the next step needed
+        emit Withdraw(msg.sender, amount);
+    }
+
+    // method for withdraw and transfer tokens to the users
+    function _withdraw(address userAdrr, uint256 amount) public {
+        aavePool.withdraw(address(token), amount, userAdrr);
+    }
+
+    function checkUpkeep(
+        bytes calldata /* checkData */
+    )
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        upkeepNeeded =
+            (status != StrategyStatus.Done) ||
+            (block.timestamp - lastTimestamp) > interval;
+    }
+
+    function performUpkeep(bytes calldata performData) external override {
+        require((status == StrategyStatus.Done), "strategy is done");
+        require(
+            ((block.timestamp - lastTimestamp) <= interval),
+            "interval is not over yet"
+        );
+
+        lastTimestamp = block.timestamp;
+
+        //TODO(nb): use arrays for supply and withdraw operations
+
+        if (status == StrategyStatus.Borrow) {
+            borrow();
+        } else if (status == StrategyStatus.Supply) {
+            supply();
+        }
+
+        // if (withdrawalQueue.length > 0) {
+        //     _withdraw();
+        //     return;
+        // }
+        // TODO(nb): question: if the keeper has to execute a supply/borrow function AND a withdraw, it will be 2 or more executions. How can be implemented that tx.wait() in the keeper script?
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
     }
 }

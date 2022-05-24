@@ -13,7 +13,11 @@ const logger = require("pino")();
 // amount swapped: 0.0001 ether
 
 const { WETH_ADDRESS } = process.env;
+<<<<<<< HEAD
 const CONTRACT_ADDRESS = "0x1586a098746EeC3e1210ca06a582f550a7dA431C";
+=======
+const CONTRACT_ADDRESS = "0x3963a2199dcCE6f8110035648e21dE8c9FC1d54d";
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
 const GAS_LIMIT = 2074040;
 const AMOUNT = 10000000000;
 const [WALLET] = await ethers.getSigners();
@@ -56,6 +60,7 @@ const doDeposit = async (): Promise<void> => {
 
 const doRecursion = async (): Promise<void> => {
   try {
+<<<<<<< HEAD
     const DONE = 2;
 
     if ((await STRATEGY.viewStatus()) === DONE) {
@@ -77,6 +82,16 @@ const doRecursion = async (): Promise<void> => {
       gasLimit: GAS_LIMIT,
     });
     await tx.wait();
+=======
+    if (STRATEGY.viewStatus() != StrategyStatus.Done) {
+      // todo(nb): ask for the gas status too
+      const tx = await STRATEGY.doRecursion({
+        from: WALLET.address,
+        gasLimit: GAS_LIMIT,
+      });
+      await tx.wait();
+    }
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
   } catch (err) {
     logger.error(err);
   }
@@ -106,8 +121,20 @@ const reqWithdraw = async (
 // We´ll cover the gas of the off-chain and sc interactions
 const main = async () => {
   await doDeposit(); // Don't have more amount :(
+<<<<<<< HEAD
 
   await reqWithdraw(WALLET.address, BigNumber.from("100"));
+=======
+  // TODO(nb): only 1 function driven with states in the sc for supply&borrow
+  // TODO(nb): check the contract state from the off-chain
+  // await doBorrow();
+  // await doSupply();
+
+  // // Request msg.sender from the withdraw
+  // await reqWithdraw(msg.sender);
+  // await doWithdraw();
+  // borrowingAmount();
+>>>>>>> 8e6c2b88e62fde65c8b8532f32c92ed4bad48c52
 };
 
 main();
