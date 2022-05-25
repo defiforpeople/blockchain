@@ -1,72 +1,52 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-// import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {IStrategy} from "./IStrategy.sol";
-import "hardhat/console.sol";
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
 import {IWETH} from "@aave/core-v3/contracts/misc/interfaces/IWETH.sol";
-
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
-// IStrategy,
-// KeeperCompatible
 contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     // interfaces
     IERC20 public token;
     IPool private aavePool;
     AggregatorV3Interface private gasPriceFeed;
+    LinkTokenInterface public link;
 
     // internal
     uint256 private investmentAmount;
     StrategyStatus private status;
-    uint256 private quotaPrice;
+    // uint256 private quotaPrice;
 
-    // contants
-    uint256 private constant GAS_USED_DEPOSIT = 1074040;
-    uint256 private constant GAS_USED_SUPPLY = 10740;
-    uint256 private constant GAS_USED_BORROW = 10740;
+    // constants
+    uint256 private constant GAS_USED_DEPOSIT = 0;
+    uint256 private constant GAS_USED_SUPPLY = 0;
+    uint256 private constant GAS_USED_BORROW = 0;
     uint256 private constant GAS_PRICE_MULTIPLIER = 3;
+    uint256 private constant LINK_USED_CALL = 0;
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
     uint16 private constant AAVE_REF_CODE = 0;
-    // timestamp save the last time a contract loop was executed
-    uint256 public lastTimestamp;
-    uint256 public interval = 10 minutes;
 
     constructor(
         address _aavePoolAddr,
         address _gasPriceFeedAddr,
-        address _wavaxAddr
+        address _wavaxAddr,
+        address _linkAddr
     ) {
-        lastTimestamp = block.timestamp;
         aavePool = IPool(_aavePoolAddr);
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
+        link = LinkTokenInterface(_linkAddr);
     }
 
     // define investments information
-    // TODO(nb): change mapping to struct
     mapping(address => uint256) public _investments;
-    // define withdrawals information
-    // Withdrawal[] public withdrawalQueue;
-    // EnumerablesSet.AddresssSet private _investmentsAddrs;
-
-    // TODO(nb): Save this data in the mapping
-    struct Invest {
-        uint256 amount;
-        uint256 timestamp;
-    }
-
-    // struct for withdrawalQueue array
-    struct Withdrawal {
-        address userAddress;
-        uint256 amount;
-    }
 
     // status that marks the next step to do in the strategy for keeper
     enum StrategyStatus {
@@ -79,11 +59,9 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     event Deposit(address indexed userAddr, uint256 amount);
     event Withdraw(address indexed userAddr, uint256 amount);
 
-    // define event for notify that more gas is needed
-    // event needGas(uint256 minGasNeeded)
-
     // method defined for the user to make an supply, and we save the investment amount with his address
     function deposit(uint256 amount) external {
+        console.log("DEPOSIT INSIDE CONTRACT");
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), amount);
 
@@ -117,7 +95,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER
         ) {
-            status = StrategyStatus.Done;
+            status = StrategyStatus.Supply;
             return;
         }
         // otherwise, it will continue with the execution flow
@@ -175,26 +153,19 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         }
     }
 
-    // method for repay the borrow with collateral
-    function repayWithCollateral(uint256 amount) public {
-        // quotaPrice = getCuotaPrice();
-        aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
-    }
-
     // method defined for the user can withdraw from the strategy
     function requestWithdraw(uint256 amount) external {
         // check if user has requested amount
         require(
-            _investments[msg.sender] > 0 || _investments[msg.sender] >= amount,
+            _investments[msg.sender] > 0 && _investments[msg.sender] >= amount,
             "No balance for requested amount"
         );
 
-        // TODO(nb): implement correctly the quotas calc flow
-        // get the quota price for calc the amount to withdraw
+        // TODO(nb): implement correctly the quotas calc flow and get the quota price for calc the amount to withdraw
         // quotaPrice = getCuotaPrice();
 
         // repay the Aave loan with collateral
-        repayWithCollateral(amount);
+        aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
 
         // rest the amount repayed of investments
         _investments[msg.sender] -= amount;
@@ -204,7 +175,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     }
 
     // method for withdraw and transfer tokens to the users
-    function _withdraw(address userAdrr, uint256 amount) public {
+    function withdraw(address userAdrr, uint256 amount) external onlyOwner {
         aavePool.withdraw(address(token), amount, userAdrr);
     }
 
@@ -243,5 +214,15 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
                 GAS_USED_DEPOSIT *
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER) - address(msg.sender).balance;
+    }
+
+    // method for returning if the contarct has enough LINK in order to call the data feeds
+    function linkNeeded() external view onlyOwner returns (uint256) {
+        if (link.balanceOf(address(this)) < LINK_USED_CALL) {
+            return 0; // if has enough LINK, it will return 0 as linkNeeded
+        }
+
+        // if it hasn't enough balance, it'll return the minimun LINK needed for executing the data feeds
+        return LINK_USED_CALL - link.balanceOf(address(this));
     }
 }
