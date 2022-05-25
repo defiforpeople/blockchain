@@ -2,7 +2,12 @@ import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 const logger = require("pino")();
 
-const { WAVAX_ADDRESS, AAVE_POOL_ADDRESS, GAS_DATA_FEED } = process.env;
+const {
+  WRAPPED_NATIVE_TOKEN_ADDRESS,
+  LINK_ADDRESS,
+  AAVE_POOL_ADDRESS,
+  GAS_DATA_FEED,
+} = process.env;
 
 // run script
 (async () => {
@@ -14,7 +19,8 @@ const { WAVAX_ADDRESS, AAVE_POOL_ADDRESS, GAS_DATA_FEED } = process.env;
     const contract = await StrategyContract.deploy(
       AAVE_POOL_ADDRESS,
       GAS_DATA_FEED,
-      WAVAX_ADDRESS
+      WRAPPED_NATIVE_TOKEN_ADDRESS,
+      LINK_ADDRESS
     );
     logger.info(`Strategy contract deployed to: ${contract.address}`);
   } catch (err) {
