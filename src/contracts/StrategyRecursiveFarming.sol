@@ -9,6 +9,7 @@ import {IStrategy} from "./IStrategy.sol";
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
 import {IWETH} from "@aave/core-v3/contracts/misc/interfaces/IWETH.sol";
+import {IRewardsController} from "@aave/periphery-v3/contracts/rewards/interfaces/IRewardsController.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
@@ -18,6 +19,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     IPool private aavePool;
     AggregatorV3Interface private gasPriceFeed;
     LinkTokenInterface public link;
+    IRewardsController public rewardsManager;
 
     // internal
     uint256 private investmentAmount;
@@ -32,17 +34,21 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     uint256 private constant LINK_USED_CALL = 0;
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
     uint16 private constant AAVE_REF_CODE = 0;
+    address[] public tokenAddresses;
 
     constructor(
         address _aavePoolAddr,
         address _gasPriceFeedAddr,
         address _wavaxAddr,
-        address _linkAddr
+        address _linkAddr,
+        address _aaveRewardsManager
     ) {
         aavePool = IPool(_aavePoolAddr);
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
         link = LinkTokenInterface(_linkAddr);
+        rewardsManager = IRewardsController(_aaveRewardsManager);
+        tokenAddresses.push(address(token));
     }
 
     // define investments information
@@ -94,7 +100,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER
         ) {
-            status = StrategyStatus.Supply;
+            status = StrategyStatus.Done;
             return;
         }
         // otherwise, it will continue with the execution flow
@@ -133,8 +139,23 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         token.approve(address(aavePool), amount);
         aavePool.supply(address(token), amount, address(this), AAVE_REF_CODE);
 
+        // get the max available amount ofr borrowing
+        (, , uint256 borrowAvailable, , , ) = aavePool.getUserAccountData(
+            address(this)
+        );
+        // if the amount is not enough for continuing with the execution, the status will be Done and the exec'll be finished
+        if (
+            borrowAvailable <
+            (GAS_USED_DEPOSIT + GAS_USED_SUPPLY) *
+                uint256(gasPrice) *
+                GAS_PRICE_MULTIPLIER
+        ) {
+            status = StrategyStatus.Done;
+            return;
+        }
+
         // update status to done, because the loop has finished
-        status = StrategyStatus.Done;
+        status = StrategyStatus.Borrow;
     }
 
     // this method returns the status of the strategy
@@ -223,5 +244,16 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
 
         // if it hasn't enough balance, it'll return the minimun LINK needed for executing the data feeds
         return LINK_USED_CALL - link.balanceOf(address(this));
+    }
+
+    // method for claiming rewards in aave
+    function claimRewards() external onlyOwner {
+        rewardsManager.claimAllRewardsToSelf(tokenAddresses);
+    }
+
+    // method that returns gas price
+    function gasPrice() external view returns (int256) {
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+        return gasPrice;
     }
 }
