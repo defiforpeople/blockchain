@@ -7,7 +7,7 @@ import {
   IERC20__factory,
   IERC20,
   StrategyRecursiveFarming,
-} from "../../typechain";
+} from "../../../typechain";
 import { doRecursion } from "./do-recursion";
 const logger = require("pino")();
 

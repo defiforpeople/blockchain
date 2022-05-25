@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 import { BigNumber } from "ethers";
 // eslint-disable-next-line camelcase
-import { StrategyRecursiveFarming } from "../../typechain";
+import { StrategyRecursiveFarming } from "../../../typechain";
 
 // defined constants
 const { CONTRACT_ADDRESS } = process.env;

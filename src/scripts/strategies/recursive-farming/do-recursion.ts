@@ -7,8 +7,8 @@ import {
   // eslint-disable-next-line camelcase
   LinkTokenInterface__factory,
   LinkTokenInterface,
-} from "../../typechain";
-import { linkFund } from "../../utils/helpers/link-fund";
+} from "../../../typechain";
+import { linkFund } from "../../../utils/helpers/link-fund";
 const logger = require("pino")();
 
 // defined constants
