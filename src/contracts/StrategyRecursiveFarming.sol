@@ -61,7 +61,6 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
 
     // method defined for the user to make an supply, and we save the investment amount with his address
     function deposit(uint256 amount) external {
-        console.log("DEPOSIT INSIDE CONTRACT");
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), amount);
 
