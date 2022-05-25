@@ -159,7 +159,7 @@ const reqWithdraw = async (
 
   await logger.info("Executing Withdraw");
   // TODO(nb): try to do it with events
-  const withdrawTx = await strategy._withdraw(userAddr, amount, {
+  const withdrawTx = await strategy.withdraw(userAddr, amount, {
     from: wallet.address,
     // TODO(nb): question: is possible to sign this tx with the user address too?
     gasLimit: GAS_LIMIT,
