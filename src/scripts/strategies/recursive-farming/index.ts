@@ -6,12 +6,11 @@ import {
   // eslint-disable-next-line camelcase
   IERC20__factory,
   IERC20,
-  StrategyRecursiveFarming,
 } from "../../../typechain";
 import { getWeth } from "../../../utils/helpers/get-weth";
 import { doRecursion } from "./do-recursion";
 import { deposit } from "./deposit";
-import { reqWithdraw } from "../withdraw";
+import { reqWithdraw } from "./withdraw";
 const logger = require("pino")();
 
 // defined constants
