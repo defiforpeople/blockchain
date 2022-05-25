@@ -7,6 +7,7 @@ const {
   LINK_ADDRESS,
   AAVE_POOL_ADDRESS,
   GAS_DATA_FEED,
+  REWARDS_EMISSION_MANAGER,
 } = process.env;
 
 // run script
@@ -20,7 +21,8 @@ const {
       AAVE_POOL_ADDRESS,
       GAS_DATA_FEED,
       WRAPPED_NATIVE_TOKEN_ADDRESS,
-      LINK_ADDRESS
+      LINK_ADDRESS,
+      REWARDS_EMISSION_MANAGER
     );
     logger.info(`Strategy contract deployed to: ${contract.address}`);
   } catch (err) {
