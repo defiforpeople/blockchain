@@ -11,19 +11,26 @@ import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTy
 import {IWETH} from "@aave/core-v3/contracts/misc/interfaces/IWETH.sol";
 import {IRewardsController} from "@aave/periphery-v3/contracts/rewards/interfaces/IRewardsController.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
-contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
+contract StrategyRecursiveFarming is
+    Pausable,
+    Ownable,
+    IStrategy,
+    KeeperCompatibleInterface
+{
     // interfaces
     IERC20 public token;
     IPool private aavePool;
     AggregatorV3Interface private gasPriceFeed;
-    LinkTokenInterface public link;
     IRewardsController public rewardsManager;
 
     // internal
     uint256 private investmentAmount;
     StrategyStatus private status;
+    uint256 private lastTimestamp;
+    uint256 public interval;
     // uint256 private quotaPrice;
 
     // constants
@@ -42,15 +49,16 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         address _aavePoolAddr,
         address _gasPriceFeedAddr,
         address _wavaxAddr,
-        address _linkAddr,
-        address _aaveRewardsManager
+        address _aaveRewardsManager,
+        uint256 _interval
     ) {
         aavePool = IPool(_aavePoolAddr);
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
-        link = LinkTokenInterface(_linkAddr);
         rewardsManager = IRewardsController(_aaveRewardsManager);
         tokenAddresses.push(address(token));
+        interval = _interval;
+        lastTimestamp = block.timestamp;
     }
 
     // define investments information
@@ -186,7 +194,6 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         return status;
     }
 
-    // method for executing the recursive loop based on the status of the strategy
     function doRecursion() external onlyOwner {
         require(status != StrategyStatus.Done, "The strategy is completed");
         if (status == StrategyStatus.Borrow) {
@@ -194,6 +201,36 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         } else if (status == StrategyStatus.Supply) {
             supply();
         }
+    }
+
+    function checkUpkeep(
+        bytes calldata /* checkData */
+    )
+        external
+        view
+        override
+        returns (
+            bool upkeepNeeded,
+            bytes memory /* performData */
+        )
+    {
+        upkeepNeeded =
+            (block.timestamp - lastTimestamp) > interval &&
+            status != StrategyStatus.Done;
+        // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
+    }
+
+    // method for executing the recursive loop based on the status of the strategy
+    function performUpkeep(
+        bytes calldata /* performData */
+    ) external override {
+        require(status != StrategyStatus.Done, "The strategy is completed");
+        if (status == StrategyStatus.Borrow) {
+            borrow();
+        } else if (status == StrategyStatus.Supply) {
+            supply();
+        }
+        lastTimestamp = block.timestamp;
     }
 
     // method defined for the user can withdraw from the strategy
@@ -242,6 +279,11 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
         aavePool.withdraw(address(token), amount, userAddr);
     }
 
+    // method for claiming rewards in aave
+    function claimRewards() external onlyOwner {
+        rewardsManager.claimAllRewardsToSelf(tokenAddresses);
+    }
+
     function getQuotaQty(address tokenAddr, uint256 amount)
         external
         view
@@ -279,14 +321,7 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
                 GAS_PRICE_MULTIPLIER) - address(msg.sender).balance;
     }
 
-    // method for claiming rewards in aave
-    function claimRewards() external onlyOwner {
-        rewardsManager.claimAllRewardsToSelf(tokenAddresses);
-    }
-
-    // method that returns gas price
-    function gasPrice() external view returns (int256) {
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-        return gasPrice;
+    function updateInterval(uint256 _interval) external onlyOwner {
+        interval = _interval;
     }
 }
