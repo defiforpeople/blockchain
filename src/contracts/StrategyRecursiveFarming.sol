@@ -27,9 +27,11 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     // uint256 private quotaPrice;
 
     // constants
-    uint256 private constant GAS_USED_DEPOSIT = 0;
-    uint256 private constant GAS_USED_SUPPLY = 0;
-    uint256 private constant GAS_USED_BORROW = 0;
+    uint256 private constant GAS_USED_DEPOSIT = 195770;
+    uint256 private constant GAS_USED_BORROW = 313819;
+    uint256 private constant GAS_USED_SUPPLY = 249953;
+    uint256 private constant GAS_USED_WITHDRAW = 223654;
+    uint256 private constant GAS_USED_REQ_WITHDRAW = 223654;
     uint256 private constant GAS_PRICE_MULTIPLIER = 3;
     uint256 private constant LINK_USED_CALL = 0;
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
@@ -67,6 +69,15 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
 
     // method defined for the user to make an supply, and we save the investment amount with his address
     function deposit(uint256 amount) external {
+        // get the gas price
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        // assert that msg.sender has enough gas to execute the method
+        require(
+            address(msg.sender).balance >= GAS_USED_DEPOSIT * uint256(gasPrice),
+            "sender has not enough gas"
+        );
+
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), amount);
 
@@ -85,13 +96,19 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     }
 
     function borrow() public {
+        // get the gas price
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        // assert that msg.sender has enough gas to execute the method
+        require(
+            address(msg.sender).balance >= GAS_USED_BORROW * uint256(gasPrice),
+            "sender has not enough gas"
+        );
+
         // get the max available amount ofr borrowing
         (, , uint256 borrowAvailable, , , ) = aavePool.getUserAccountData(
             address(this)
         );
-
-        // get the gas price
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
         // if the amount is not enough for continuing with the execution, the status will be Done and the exec'll be finished
         if (
@@ -121,6 +138,12 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     function supply() internal {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        // assert that msg.sender has enough gas to execute the method
+        require(
+            address(msg.sender).balance >= GAS_USED_SUPPLY * uint256(gasPrice),
+            "sender has not enough gas"
+        );
 
         // if the amount is not enough for continuing with the execution, the status will be Done and the exec'll be finished
         if (
@@ -175,6 +198,16 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
 
     // method defined for the user can withdraw from the strategy
     function requestWithdraw(uint256 amount) external {
+        // get the gas price
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        // assert that msg.sender has enough gas to execute the method
+        require(
+            address(msg.sender).balance >=
+                GAS_USED_REQ_WITHDRAW * uint256(gasPrice),
+            "sender has not enough gas"
+        );
+
         // check if user has requested amount
         require(
             _investments[msg.sender] > 0 && _investments[msg.sender] >= amount,
@@ -195,8 +228,18 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
     }
 
     // method for withdraw and transfer tokens to the users
-    function withdraw(address userAdrr, uint256 amount) external onlyOwner {
-        aavePool.withdraw(address(token), amount, userAdrr);
+    function withdraw(address userAddr, uint256 amount) external onlyOwner {
+        // get the gas price
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+
+        // assert that msg.sender has enough gas to execute the method
+        require(
+            address(msg.sender).balance > GAS_USED_WITHDRAW * uint256(gasPrice),
+            "sender has not enough gas"
+        );
+
+        // withdraw token amount from aave, to the userAddr
+        aavePool.withdraw(address(token), amount, userAddr);
     }
 
     function getQuotaQty(address tokenAddr, uint256 amount)
@@ -234,16 +277,6 @@ contract StrategyRecursiveFarming is Pausable, Ownable, IStrategy {
                 GAS_USED_DEPOSIT *
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER) - address(msg.sender).balance;
-    }
-
-    // method for returning if the contarct has enough LINK in order to call the data feeds
-    function linkNeeded() external view onlyOwner returns (uint256) {
-        if (link.balanceOf(address(this)) < LINK_USED_CALL) {
-            return 0; // if has enough LINK, it will return 0 as linkNeeded
-        }
-
-        // if it hasn't enough balance, it'll return the minimun LINK needed for executing the data feeds
-        return LINK_USED_CALL - link.balanceOf(address(this));
     }
 
     // method for claiming rewards in aave
