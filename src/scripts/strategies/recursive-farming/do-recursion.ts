@@ -1,16 +1,11 @@
 import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
-import {
-  StrategyRecursiveFarming,
-  // eslint-disable-next-line camelcase
-  LinkTokenInterface__factory,
-  LinkTokenInterface,
-} from "../../../typechain";
+import { StrategyRecursiveFarming } from "../../../typechain";
 const logger = require("pino")();
 
 // defined constants
-const { CONTRACT_ADDRESS, LINK_ADDRESS } = process.env;
+const { CONTRACT_ADDRESS } = process.env;
 const GAS_LIMIT = 2074040;
 
 // TODO(nb): implement cron jobs for execuitng doRecursion() automatically
@@ -26,24 +21,6 @@ export async function doRecursion(): Promise<void> {
   const strategy = strategyCONTRACT.attach(
     `${CONTRACT_ADDRESS}`
   ) as StrategyRecursiveFarming;
-
-  // get the LINK token
-  const linkToken = (await ethers.getContractAt(
-    LinkTokenInterface__factory.abi,
-    `${LINK_ADDRESS}`
-  )) as LinkTokenInterface;
-
-  // evaluating LINK amount of the wallet owner before executing (for testing)
-  let contractLinkAmm = await linkToken.balanceOf(wallet.address);
-  await logger.info(
-    `the wallet amount of LINK after recursion is: ${contractLinkAmm}`
-  );
-
-  // evaluating LINK amount of the smart contract before executing (for testing)
-  let walletLinkAmm = await linkToken.balanceOf(`${CONTRACT_ADDRESS}`);
-  await logger.info(
-    `the wallet amount of LINK after recursion is: ${walletLinkAmm}`
-  );
 
   try {
     // define constants for possible smart contract status
@@ -75,7 +52,7 @@ export async function doRecursion(): Promise<void> {
 
     // start execution of the recursion
     await logger.info("Executing Recursion function...");
-    const tx = await strategy.performUpkeep("", {
+    const tx = await strategy.doRecursion({
       from: wallet.address,
       gasLimit: GAS_LIMIT,
     });
@@ -85,10 +62,10 @@ export async function doRecursion(): Promise<void> {
     strategyStatus = await strategy.viewStatus();
     await logger.info(`The status of the strategy is ${strategyStatus}`);
 
-    // if the status if supply, then execute again performUpkeep("",)
+    // if the status if supply, then execute again doRecursion()
     if (strategyStatus === supply) {
       await logger.info("Executing Supply...");
-      const tx = await strategy.performUpkeep("", {
+      const tx = await strategy.doRecursion({
         from: wallet.address,
         gasLimit: GAS_LIMIT,
       });
@@ -98,18 +75,6 @@ export async function doRecursion(): Promise<void> {
     // get and print the strategy status
     strategyStatus = await strategy.viewStatus();
     await logger.info(`The status of the strategy is ${strategyStatus}`);
-
-    // evaluating LINK amount of the wallet owner after executing (for testing)
-    contractLinkAmm = await linkToken.balanceOf(wallet.address);
-    await logger.info(
-      `the wallet amount of LINK after recursion is: ${contractLinkAmm}`
-    );
-
-    // evaluating LINK amount of the smart contract after executing (for testing)
-    walletLinkAmm = await linkToken.balanceOf(`${CONTRACT_ADDRESS}`);
-    await logger.info(
-      `the wallet amount of LINK after recursion is: ${walletLinkAmm}`
-    );
   } catch (err) {
     logger.error(err);
   }

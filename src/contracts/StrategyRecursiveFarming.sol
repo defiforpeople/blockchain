@@ -34,6 +34,7 @@ contract StrategyRecursiveFarming is
     // uint256 private quotaPrice;
 
     // constants
+    // TODO(nb): update all the GAS constants when we have the last version of the contract
     uint256 private constant GAS_USED_DEPOSIT = 195770;
     uint256 private constant GAS_USED_BORROW = 313819;
     uint256 private constant GAS_USED_SUPPLY = 249953;
@@ -203,36 +204,6 @@ contract StrategyRecursiveFarming is
         }
     }
 
-    function checkUpkeep(
-        bytes calldata /* checkData */
-    )
-        external
-        view
-        override
-        returns (
-            bool upkeepNeeded,
-            bytes memory /* performData */
-        )
-    {
-        upkeepNeeded =
-            (block.timestamp - lastTimestamp) > interval &&
-            status != StrategyStatus.Done;
-        // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
-    }
-
-    // method for executing the recursive loop based on the status of the strategy
-    function performUpkeep(
-        bytes calldata /* performData */
-    ) external override {
-        require(status != StrategyStatus.Done, "The strategy is completed");
-        if (status == StrategyStatus.Borrow) {
-            borrow();
-        } else if (status == StrategyStatus.Supply) {
-            supply();
-        }
-        lastTimestamp = block.timestamp;
-    }
-
     // method defined for the user can withdraw from the strategy
     function requestWithdraw(uint256 amount) external {
         // get the gas price
@@ -321,6 +292,39 @@ contract StrategyRecursiveFarming is
                 GAS_PRICE_MULTIPLIER) - address(msg.sender).balance;
     }
 
+    // method that uses keeper for know if it has to executo performUpkeep() or not
+    function checkUpkeep(
+        bytes calldata /* checkData */
+    )
+        external
+        view
+        override
+        returns (
+            bool upkeepNeeded,
+            bytes memory /* performData */
+        )
+    {
+        upkeepNeeded =
+            (block.timestamp - lastTimestamp) > interval &&
+            status != StrategyStatus.Done;
+    }
+
+    // method for executing the recursive loop based on the status of the strategy with the keeper
+    function performUpkeep(
+        bytes calldata /* performData */
+    ) external override {
+        require(status != StrategyStatus.Done, "The strategy is completed");
+
+        if (status == StrategyStatus.Borrow) {
+            borrow();
+        } else if (status == StrategyStatus.Supply) {
+            supply();
+        }
+        // update the last time that the keeper executed the function
+        lastTimestamp = block.timestamp;
+    }
+
+    // method for updating keeper interval
     function updateInterval(uint256 _interval) external onlyOwner {
         interval = _interval;
     }

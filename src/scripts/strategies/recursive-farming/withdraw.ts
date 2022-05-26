@@ -43,7 +43,6 @@ export async function reqWithdraw(
       gasLimit: GAS_LIMIT,
     });
     await withdrawTx.wait();
-    await logger.info(withdrawTx);
   } catch (err) {
     logger.error(err);
   }
