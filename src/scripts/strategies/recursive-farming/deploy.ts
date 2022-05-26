@@ -9,7 +9,7 @@ const {
   REWARDS_EMISSION_MANAGER,
 } = process.env;
 
-// run script
+// run script for deploy
 (async () => {
   try {
     logger.info(`Deploying the contract...`);
@@ -21,7 +21,7 @@ const {
       GAS_DATA_FEED,
       WRAPPED_NATIVE_TOKEN_ADDRESS,
       REWARDS_EMISSION_MANAGER,
-      300 // interval of the keeper (seconds)
+      300
     );
     logger.info(`Strategy contract deployed to: ${contract.address}`);
   } catch (err) {

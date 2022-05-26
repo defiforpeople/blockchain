@@ -8,9 +8,9 @@ import {
   IERC20,
 } from "../../../typechain";
 import { getWeth } from "../../../utils/helpers/get-weth";
-import { doRecursion } from "./do-recursion";
 import { deposit } from "./deposit";
 import { reqWithdraw } from "./withdraw";
+import { claimRewardToken } from "./claimRewards";
 const logger = require("pino")();
 
 // defined constants
@@ -60,7 +60,6 @@ const main = async () => {
 };
 
 main();
-// claimRewardToken();
-
+// claimRewardToken(); // couldn't be tested because the testnets don't able
 // ## UNUSED METHODS:
 // getGasPrice();
