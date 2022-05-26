@@ -1,5 +1,4 @@
 import { ethers } from "hardhat";
-import { BigNumber } from "ethers";
 import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
 import {
@@ -8,7 +7,6 @@ import {
   LinkTokenInterface__factory,
   LinkTokenInterface,
 } from "../../../typechain";
-import { linkFund } from "../../../utils/helpers/link-fund";
 const logger = require("pino")();
 
 // defined constants
@@ -63,23 +61,6 @@ export async function doRecursion(): Promise<void> {
       return;
     }
 
-    // // ## The following was commented because something fails:
-    // await logger.info("checking if the contract has enough LINK");
-    // const linkNeeded = await strategy.linkNeeded({
-    //   // FAILS
-    //   from: wallet.address,
-    //   gasLimit: GAS_LIMIT,
-    // });
-    // if (linkNeeded > BigNumber.from("0")) {
-    //   if ((await linkToken.balanceOf(wallet.address)) < linkNeeded) {
-    //     logger.info("The owner wallet hasn't enough LINK for funding!");
-    //     return;
-    //   }
-    //   logger.info("Funding LINK...");
-    //   await linkFund(wallet.address, linkNeeded);
-    //   logger.info("LINK transfered to smart contract!");
-    // }
-
     // // TODO(nb): question: don't know if calculating the owner wallet gas is necessary
     // if (
     //   (await strategy.gasNeeded({
@@ -91,11 +72,10 @@ export async function doRecursion(): Promise<void> {
     //   logger.info("The owner wallet hasn't enough gas!");
     //   return;
     // }
-    // // ##
 
     // start execution of the recursion
     await logger.info("Executing Recursion function...");
-    const tx = await strategy.doRecursion({
+    const tx = await strategy.performUpkeep("", {
       from: wallet.address,
       gasLimit: GAS_LIMIT,
     });
@@ -105,10 +85,10 @@ export async function doRecursion(): Promise<void> {
     strategyStatus = await strategy.viewStatus();
     await logger.info(`The status of the strategy is ${strategyStatus}`);
 
-    // if the status if supply, then execute again doRecursion()
+    // if the status if supply, then execute again performUpkeep("",)
     if (strategyStatus === supply) {
       await logger.info("Executing Supply...");
-      const tx = await strategy.doRecursion({
+      const tx = await strategy.performUpkeep("", {
         from: wallet.address,
         gasLimit: GAS_LIMIT,
       });
