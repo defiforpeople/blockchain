@@ -4,7 +4,6 @@ const logger = require("pino")();
 
 const {
   WRAPPED_NATIVE_TOKEN_ADDRESS,
-  LINK_ADDRESS,
   AAVE_POOL_ADDRESS,
   GAS_DATA_FEED,
   REWARDS_EMISSION_MANAGER,
@@ -21,8 +20,8 @@ const {
       AAVE_POOL_ADDRESS,
       GAS_DATA_FEED,
       WRAPPED_NATIVE_TOKEN_ADDRESS,
-      LINK_ADDRESS,
-      REWARDS_EMISSION_MANAGER
+      REWARDS_EMISSION_MANAGER,
+      300 // interval of the keeper (seconds)
     );
     logger.info(`Strategy contract deployed to: ${contract.address}`);
   } catch (err) {
