@@ -2,7 +2,7 @@ import { sleep, minute } from "../../../utils/helpers/sleep";
 import { doRecursion } from "../recursive-farming/do-recursion";
 const logger = require("pino")();
 
-// defined constants
+// execute claimRewardToken() every 5 minutes
 (async () => {
   while (true) {
     const sleepInterval = 5;
