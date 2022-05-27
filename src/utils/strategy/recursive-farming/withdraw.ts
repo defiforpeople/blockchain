@@ -7,7 +7,7 @@ export async function withdraw(
   strategyAddress: string,
   userAddr: string,
   tokenAddr: string,
-  cuotas: BigNumber
+  amount: BigNumber
 ): Promise<void> {
   const strategyContract = await ethers.getContractFactory(
     "StrategyRecursiveFarming"
@@ -16,6 +16,6 @@ export async function withdraw(
     strategyAddress
   )) as StrategyRecursiveFarming;
 
-  const tx = await strategy.withdraw(userAddr, tokenAddr, cuotas);
+  const tx = await strategy.requestWithdraw(amount);
   await tx.wait();
 }
