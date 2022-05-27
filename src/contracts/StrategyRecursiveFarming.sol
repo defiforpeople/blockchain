@@ -42,7 +42,7 @@ contract StrategyRecursiveFarming is
     uint256 private constant GAS_USED_WITHDRAW = 223654;
     uint256 private constant GAS_USED_REQ_WITHDRAW = 223654;
     uint256 private constant GAS_PRICE_MULTIPLIER = 0;
-    uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
+    uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always in variable mode
     uint16 private constant AAVE_REF_CODE = 0;
     uint256 private constant BASE_QUOTA = 1**10**18;
 
@@ -82,7 +82,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method defined for the user to make an supply, and we save the investment amount with his address
-    function deposit(uint256 amount) external {
+    function deposit(uint256 _amount) external {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -93,31 +93,28 @@ contract StrategyRecursiveFarming is
         );
 
         // transfer the user amount to this contract (user has to approve before this)
-        token.transferFrom(msg.sender, address(this), amount);
+        token.transferFrom(msg.sender, address(this), _amount);
 
         // save amount in the mapping
-        _investments[msg.sender].amount += amount;
+        _investments[msg.sender].amount += _amount;
         // calculate and save quotas
-        _investments[msg.sender].quotas += _getQuotaQty(amount);
+        uint256 quotas = _getQuotaQty(_amount);
+        _investments[msg.sender].quotas += quotas;
         // sum amount to totalInvested
-        totalInvested += amount;
+        totalInvested += _amount;
 
         // approve and supply liquidity to the protocol
-        token.approve(address(aavePool), amount);
-        aavePool.supply(address(token), amount, address(this), AAVE_REF_CODE);
+        token.approve(address(aavePool), _amount);
+        aavePool.supply(address(token), _amount, address(this), AAVE_REF_CODE);
 
         // update the status of the strategy to the next step to do
         status = StrategyStatus.Borrow;
 
         // emit Deposit event
-        emit Deposit(
-            msg.sender,
-            _investments[msg.sender].amount,
-            _investments[msg.sender].quotas
-        );
+        emit Deposit(msg.sender, _amount, quotas);
     }
 
-    function borrow() public {
+    function borrow() internal {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -157,6 +154,7 @@ contract StrategyRecursiveFarming is
         status = StrategyStatus.Supply;
     }
 
+    // method for supply liquidity to aave
     function supply() internal {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
@@ -174,8 +172,7 @@ contract StrategyRecursiveFarming is
         ) {
             status = StrategyStatus.Done;
             return;
-        }
-        // otherwise, it will continue with the execution flow
+        } // otherwise, it will continue with the execution flow:
 
         // the var amount will contain the WAVAX of the contract(what we borrowed before)
         uint256 amount = token.balanceOf(address(this));
@@ -188,18 +185,20 @@ contract StrategyRecursiveFarming is
         (, , uint256 borrowAvailable, , , ) = aavePool.getUserAccountData(
             address(this)
         );
-        // if the amount is not enough for continuing with the execution, the status will be Done and the exec'll be finished
+
+        // if the amount is not enough for continuing with the execution, the status will be Done and the exec will be finished
         if (
             borrowAvailable <
             (GAS_USED_DEPOSIT + GAS_USED_SUPPLY) *
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER
         ) {
+            // update status to done, because the loop has finished
             status = StrategyStatus.Done;
             return;
         }
 
-        // update status to done, because the loop has finished
+        // otherwise, update status to borrow, that is the next step
         status = StrategyStatus.Borrow;
     }
 
@@ -219,7 +218,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method defined for the user can withdraw from the strategy
-    function requestWithdraw(uint256 quotas) external {
+    function requestWithdraw(uint256 _quotas) external {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -233,24 +232,24 @@ contract StrategyRecursiveFarming is
         // check if user has requested amount
         require(
             _investments[msg.sender].quotas > 0 &&
-                _investments[msg.sender].quotas >= quotas,
+                _investments[msg.sender].quotas >= _quotas,
             "No balance for requested amount"
         );
 
         // rest the amount repayed of investments
-        uint256 amount = quotas * _getQuotaPrice();
+        uint256 amount = _quotas * _getQuotaPrice();
         _investments[msg.sender].amount -= amount;
-        _investments[msg.sender].quotas -= quotas;
+        _investments[msg.sender].quotas -= _quotas;
 
         // repay the Aave loan with collateral
         aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
 
         // update the status of strategy for the next step needed
-        emit Withdraw(msg.sender, amount, quotas);
+        emit Withdraw(msg.sender, amount, _quotas);
     }
 
     // method for withdraw and transfer tokens to the users
-    function withdraw(address userAddr, uint256 amount) external onlyOwner {
+    function withdraw(address _userAddr, uint256 _amount) external onlyOwner {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -261,9 +260,10 @@ contract StrategyRecursiveFarming is
         );
 
         // withdraw token amount from aave, to the userAddr
-        aavePool.withdraw(address(token), amount, userAddr);
+        aavePool.withdraw(address(token), _amount, _userAddr);
+
         // rest amount to totalInvested
-        totalInvested -= amount;
+        totalInvested -= _amount;
     }
 
     // method for claiming rewards in aave
@@ -272,21 +272,22 @@ contract StrategyRecursiveFarming is
     }
 
     //
-    function getQuotaQty(uint256 amount)
+    function getQuotaQty(uint256 _amount)
         external
         view
         onlyOwner
         returns (uint256)
     {
-        return _getQuotaQty(amount);
+        return _getQuotaQty(_amount);
     }
 
-    function getQuotaPrice() external view returns (uint256) {
+    function getQuotaPrice() external view onlyOwner returns (uint256) {
         return _getQuotaPrice();
     }
 
-    function _getQuotaQty(uint256 amount) internal view returns (uint256) {
-        return amount / _getQuotaPrice();
+    function _getQuotaQty(uint256 _amount) internal view returns (uint256) {
+        uint256 quotasQuantity = _amount / _getQuotaPrice();
+        return quotasQuantity;
     }
 
     function _getQuotaPrice() internal view returns (uint256) {
@@ -309,8 +310,7 @@ contract StrategyRecursiveFarming is
 
         if (
             address(msg.sender).balance <
-            GAS_USED_BORROW +
-                GAS_USED_DEPOSIT *
+            (GAS_USED_BORROW + GAS_USED_DEPOSIT) *
                 uint256(gasPrice) *
                 GAS_PRICE_MULTIPLIER
         ) {
