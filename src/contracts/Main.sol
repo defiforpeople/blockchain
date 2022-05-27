@@ -58,8 +58,6 @@ contract Main is Ownable {
         return (names, addrs);
     }
 
-    // function getDeposits(address userAddress)
-
     function getCuotaByStrategy(address strategyAddr)
         external
         view

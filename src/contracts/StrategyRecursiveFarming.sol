@@ -46,6 +46,28 @@ contract StrategyRecursiveFarming is
     uint16 private constant AAVE_REF_CODE = 0;
     address[] public tokenAddresses;
 
+    struct Invest {
+        uint256 amount;
+        uint256 quotas;
+        uint256 timestamp;
+    }
+
+    // define investments information
+    mapping(address => Invest) public _investments;
+    uint256 private totalAmount;
+    uint256 private totalQuotas;
+
+    // status that marks the next step to do in the strategy for keeper
+    enum StrategyStatus {
+        Borrow,
+        Supply,
+        Done
+    }
+
+    // events for Deposit and Withdraw funcitons
+    event Deposit(address indexed userAddr, uint256 amount);
+    event Withdraw(address indexed userAddr, uint256 amount);
+
     constructor(
         address _aavePoolAddr,
         address _gasPriceFeedAddr,
@@ -62,20 +84,6 @@ contract StrategyRecursiveFarming is
         lastTimestamp = block.timestamp;
     }
 
-    // define investments information
-    mapping(address => uint256) public _investments;
-
-    // status that marks the next step to do in the strategy for keeper
-    enum StrategyStatus {
-        Borrow,
-        Supply,
-        Done
-    }
-
-    // events for Deposit and Withdraw funcitons
-    event Deposit(address indexed userAddr, uint256 amount);
-    event Withdraw(address indexed userAddr, uint256 amount);
-
     // method defined for the user to make an supply, and we save the investment amount with his address
     function deposit(uint256 amount) external {
         // get the gas price
@@ -91,7 +99,12 @@ contract StrategyRecursiveFarming is
         token.transferFrom(msg.sender, address(this), amount);
 
         // save investments in the mapping
-        _investments[msg.sender] += amount;
+        _investments[msg.sender].amount += amount;
+        totalAmount += amount;
+        _investments[msg.sender].timestamp = block.timestamp;
+        uint256 quotas = getQuotaQty(amount);
+        _investments[msg.sender].quotas = quotas;
+        totalQuotas += quotas;
 
         // approve and supply liquidity to the protocol
         token.approve(address(aavePool), amount);
@@ -218,18 +231,21 @@ contract StrategyRecursiveFarming is
 
         // check if user has requested amount
         require(
-            _investments[msg.sender] > 0 && _investments[msg.sender] >= amount,
+            _investments[msg.sender].amount > 0 &&
+                _investments[msg.sender].amount >= amount,
             "No balance for requested amount"
         );
 
         // TODO(nb): implement correctly the quotas calc flow and get the quota price for calc the amount to withdraw
-        // quotaPrice = getCuotaPrice();
+        // quotaPrice = getQuotaPrice();
 
         // repay the Aave loan with collateral
         aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
 
         // rest the amount repayed of investments
-        _investments[msg.sender] -= amount;
+        _investments[msg.sender].amount -= amount;
+        totalAmount -= amount;
+        totalQuotas -= _investments[msg.sender].quotas;
 
         // update the status of strategy for the next step needed
         emit Withdraw(msg.sender, amount);
@@ -255,16 +271,26 @@ contract StrategyRecursiveFarming is
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
     }
 
-    function getQuotaQty(address tokenAddr, uint256 amount)
-        external
-        view
-        returns (uint256)
-    {
-        uint256 qty = amount; //  / getCuotaPrice();
-        return qty;
+    function getQuotaQty(uint256 amount) external view returns (uint256) {
+        return _getQuotaQty(amount);
     }
 
     function getQuotaPrice() external view returns (uint256) {
+        return _getQuotaPrice();
+    }
+
+    function _getQuotaQty(uint256 amount) internal view returns (uint256) {
+        return amount / getQuotaPrice();
+    }
+
+    function _getQuotaPrice() internal view returns (uint256) {
+        // total aave  => 1.000.100
+
+        // initial amount _investments[addr].quotas
+
+        // total amount = totalAmount   1.000.000
+        // total amount = totalQuotas
+
         return 0;
     }
 

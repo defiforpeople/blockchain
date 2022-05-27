@@ -210,7 +210,7 @@ const config: HardhatUserConfig = {
     ],
   },
   networks: {
-    ropsten: {
+    goerli: {
       url: process.env.URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
