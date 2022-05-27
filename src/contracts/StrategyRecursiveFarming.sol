@@ -303,29 +303,6 @@ contract StrategyRecursiveFarming is
         return quotaPrice;
     }
 
-    // method for returning if the wallet that'll execute has enough GAS in order to complete a loop
-    function gasNeeded() external view onlyOwner returns (uint256) {
-        // get the gas price
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-
-        if (
-            address(msg.sender).balance <
-            (GAS_USED_BORROW + GAS_USED_DEPOSIT) *
-                uint256(gasPrice) *
-                GAS_PRICE_MULTIPLIER
-        ) {
-            // if has enough balance, it will return 0 as gasNeeded
-            return 0;
-        }
-
-        // if it hasn't enough balance, it'll return the minimun gas needed for executing a loop
-        return
-            (GAS_USED_BORROW +
-                GAS_USED_DEPOSIT *
-                uint256(gasPrice) *
-                GAS_PRICE_MULTIPLIER) - address(msg.sender).balance;
-    }
-
     // method that uses keeper for know if it has to executo performUpkeep() or not
     function checkUpkeep(
         bytes calldata /* checkData */
