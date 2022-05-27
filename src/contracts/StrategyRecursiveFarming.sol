@@ -31,7 +31,8 @@ contract StrategyRecursiveFarming is
     StrategyStatus private status;
     uint256 private lastTimestamp;
     uint256 public interval;
-    // uint256 private quotaPrice;
+    uint256 public totalInvested;
+    address[] public tokenAddresses;
 
     // constants
     // TODO(nb): update all the GAS constants when we have the last version of the contract
@@ -40,22 +41,18 @@ contract StrategyRecursiveFarming is
     uint256 private constant GAS_USED_SUPPLY = 249953;
     uint256 private constant GAS_USED_WITHDRAW = 223654;
     uint256 private constant GAS_USED_REQ_WITHDRAW = 223654;
-    uint256 private constant GAS_PRICE_MULTIPLIER = 3;
-    uint256 private constant LINK_USED_CALL = 0;
+    uint256 private constant GAS_PRICE_MULTIPLIER = 0;
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always variable
     uint16 private constant AAVE_REF_CODE = 0;
-    address[] public tokenAddresses;
+    uint256 private constant BASE_QUOTA = 1**10**18;
 
     struct Invest {
         uint256 amount;
         uint256 quotas;
-        uint256 timestamp;
     }
 
     // define investments information
     mapping(address => Invest) public _investments;
-    uint256 private totalAmount;
-    uint256 private totalQuotas;
 
     // status that marks the next step to do in the strategy for keeper
     enum StrategyStatus {
@@ -65,8 +62,8 @@ contract StrategyRecursiveFarming is
     }
 
     // events for Deposit and Withdraw funcitons
-    event Deposit(address indexed userAddr, uint256 amount);
-    event Withdraw(address indexed userAddr, uint256 amount);
+    event Deposit(address indexed userAddr, uint256 amount, uint256 quotas);
+    event Withdraw(address indexed userAddr, uint256 amount, uint256 quotas);
 
     constructor(
         address _aavePoolAddr,
@@ -79,9 +76,9 @@ contract StrategyRecursiveFarming is
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
         rewardsManager = IRewardsController(_aaveRewardsManager);
-        tokenAddresses.push(address(token));
         interval = _interval;
         lastTimestamp = block.timestamp;
+        tokenAddresses.push(_wavaxAddr);
     }
 
     // method defined for the user to make an supply, and we save the investment amount with his address
@@ -98,13 +95,12 @@ contract StrategyRecursiveFarming is
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), amount);
 
-        // save investments in the mapping
+        // save amount in the mapping
         _investments[msg.sender].amount += amount;
-        totalAmount += amount;
-        _investments[msg.sender].timestamp = block.timestamp;
-        uint256 quotas = getQuotaQty(amount);
-        _investments[msg.sender].quotas = quotas;
-        totalQuotas += quotas;
+        // calculate and save quotas
+        _investments[msg.sender].quotas += _getQuotaQty(amount);
+        // sum amount to totalInvested
+        totalInvested += amount;
 
         // approve and supply liquidity to the protocol
         token.approve(address(aavePool), amount);
@@ -114,7 +110,11 @@ contract StrategyRecursiveFarming is
         status = StrategyStatus.Borrow;
 
         // emit Deposit event
-        emit Deposit(msg.sender, amount);
+        emit Deposit(
+            msg.sender,
+            _investments[msg.sender].amount,
+            _investments[msg.sender].quotas
+        );
     }
 
     function borrow() public {
@@ -208,6 +208,7 @@ contract StrategyRecursiveFarming is
         return status;
     }
 
+    // method for executing the loop, based on the status of the contract
     function doRecursion() external onlyOwner {
         require(status != StrategyStatus.Done, "The strategy is completed");
         if (status == StrategyStatus.Borrow) {
@@ -218,7 +219,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method defined for the user can withdraw from the strategy
-    function requestWithdraw(uint256 amount) external {
+    function requestWithdraw(uint256 quotas) external {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -231,24 +232,21 @@ contract StrategyRecursiveFarming is
 
         // check if user has requested amount
         require(
-            _investments[msg.sender].amount > 0 &&
-                _investments[msg.sender].amount >= amount,
+            _investments[msg.sender].quotas > 0 &&
+                _investments[msg.sender].quotas >= quotas,
             "No balance for requested amount"
         );
 
-        // TODO(nb): implement correctly the quotas calc flow and get the quota price for calc the amount to withdraw
-        // quotaPrice = getQuotaPrice();
+        // rest the amount repayed of investments
+        uint256 amount = quotas * _getQuotaPrice();
+        _investments[msg.sender].amount -= amount;
+        _investments[msg.sender].quotas -= quotas;
 
         // repay the Aave loan with collateral
         aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
 
-        // rest the amount repayed of investments
-        _investments[msg.sender].amount -= amount;
-        totalAmount -= amount;
-        totalQuotas -= _investments[msg.sender].quotas;
-
         // update the status of strategy for the next step needed
-        emit Withdraw(msg.sender, amount);
+        emit Withdraw(msg.sender, amount, quotas);
     }
 
     // method for withdraw and transfer tokens to the users
@@ -264,6 +262,8 @@ contract StrategyRecursiveFarming is
 
         // withdraw token amount from aave, to the userAddr
         aavePool.withdraw(address(token), amount, userAddr);
+        // rest amount to totalInvested
+        totalInvested -= amount;
     }
 
     // method for claiming rewards in aave
@@ -271,7 +271,13 @@ contract StrategyRecursiveFarming is
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
     }
 
-    function getQuotaQty(uint256 amount) external view returns (uint256) {
+    //
+    function getQuotaQty(uint256 amount)
+        external
+        view
+        onlyOwner
+        returns (uint256)
+    {
         return _getQuotaQty(amount);
     }
 
@@ -280,18 +286,20 @@ contract StrategyRecursiveFarming is
     }
 
     function _getQuotaQty(uint256 amount) internal view returns (uint256) {
-        return amount / getQuotaPrice();
+        return amount / _getQuotaPrice();
     }
 
     function _getQuotaPrice() internal view returns (uint256) {
-        // total aave  => 1.000.100
+        (uint256 totalCollateralBase, uint256 totalDebtBase, , , , ) = aavePool
+            .getUserAccountData(address(this));
 
-        // initial amount _investments[addr].quotas
+        uint256 profit = totalCollateralBase +
+            token.balanceOf(address(this)) -
+            totalDebtBase -
+            totalInvested;
 
-        // total amount = totalAmount   1.000.000
-        // total amount = totalQuotas
-
-        return 0;
+        uint256 quotaPrice = BASE_QUOTA + profit;
+        return quotaPrice;
     }
 
     // method for returning if the wallet that'll execute has enough GAS in order to complete a loop
