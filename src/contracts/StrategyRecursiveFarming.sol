@@ -8,7 +8,6 @@ import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {IStrategy} from "./IStrategy.sol";
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
-import {IWETH} from "@aave/core-v3/contracts/misc/interfaces/IWETH.sol";
 import {IRewardsController} from "@aave/periphery-v3/contracts/rewards/interfaces/IRewardsController.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
@@ -33,18 +32,19 @@ contract StrategyRecursiveFarming is
     uint256 public interval;
     uint256 public totalInvested;
     address[] public tokenAddresses;
+    uint256 public wavaxTotalSupply;
 
     // constants
-    // TODO(nb): update all the GAS constants when we have the last version of the contract
-    uint256 private constant GAS_USED_DEPOSIT = 195770;
-    uint256 private constant GAS_USED_BORROW = 313819;
-    uint256 private constant GAS_USED_SUPPLY = 249953;
+    uint256 private constant GAS_USED_DEPOSIT = 345304;
+    uint256 private constant GAS_USED_BORROW = 321838;
+    uint256 private constant GAS_USED_SUPPLY = 250410;
     uint256 private constant GAS_USED_WITHDRAW = 223654;
     uint256 private constant GAS_USED_REQ_WITHDRAW = 223654;
-    uint256 private constant GAS_PRICE_MULTIPLIER = 0;
+    uint256 private constant GAS_USED_CLAIM = 223654;
+    uint256 private constant GAS_PRICE_MULTIPLIER = 0; // multiply for 0 for using less amount in a testnet version ;)
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always in variable mode
     uint16 private constant AAVE_REF_CODE = 0;
-    uint256 private constant BASE_QUOTA = 1**10**18;
+    uint256 private constant BASE_QUOTA = 1;
 
     struct Invest {
         uint256 amount;
@@ -79,19 +79,26 @@ contract StrategyRecursiveFarming is
         interval = _interval;
         lastTimestamp = block.timestamp;
         tokenAddresses.push(_wavaxAddr);
+        wavaxTotalSupply = token.totalSupply();
+    }
+
+    modifier enoughGas(uint256 gasUsed) {
+        // get the gas price
+        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
+        require(
+            address(msg.sender).balance >= gasUsed * uint256(gasPrice),
+            "sender has not enough gas"
+        );
+        _;
     }
 
     // method defined for the user to make an supply, and we save the investment amount with his address
-    function deposit(uint256 _amount) external {
-        // get the gas price
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-
+    function deposit(uint256 _amount) external enoughGas(GAS_USED_DEPOSIT) {
         // assert that msg.sender has enough gas to execute the method
         require(
-            address(msg.sender).balance >= GAS_USED_DEPOSIT * uint256(gasPrice),
-            "sender has not enough gas"
+            token.balanceOf(address(msg.sender)) >= _amount,
+            "sender has not enough balance"
         );
-
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), _amount);
 
@@ -114,15 +121,9 @@ contract StrategyRecursiveFarming is
         emit Deposit(msg.sender, _amount, quotas);
     }
 
-    function borrow() internal {
+    function _borrow() internal enoughGas(GAS_USED_BORROW) {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-
-        // assert that msg.sender has enough gas to execute the method
-        require(
-            address(msg.sender).balance >= GAS_USED_BORROW * uint256(gasPrice),
-            "sender has not enough gas"
-        );
 
         // get the max available amount ofr borrowing
         (, , uint256 borrowAvailable, , , ) = aavePool.getUserAccountData(
@@ -155,15 +156,9 @@ contract StrategyRecursiveFarming is
     }
 
     // method for supply liquidity to aave
-    function supply() internal {
+    function _supply() internal enoughGas(GAS_USED_SUPPLY) {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-
-        // assert that msg.sender has enough gas to execute the method
-        require(
-            address(msg.sender).balance >= GAS_USED_SUPPLY * uint256(gasPrice),
-            "sender has not enough gas"
-        );
 
         // if the amount is not enough for continuing with the execution, the status will be Done and the exec'll be finished
         if (
@@ -211,24 +206,21 @@ contract StrategyRecursiveFarming is
     function doRecursion() external onlyOwner {
         require(status != StrategyStatus.Done, "The strategy is completed");
         if (status == StrategyStatus.Borrow) {
-            borrow();
+            _borrow();
         } else if (status == StrategyStatus.Supply) {
-            supply();
+            _supply();
         }
     }
 
+    function quotasPerAddress() external view returns (uint256) {
+        return _investments[msg.sender].quotas;
+    }
+
     // method defined for the user can withdraw from the strategy
-    function requestWithdraw(uint256 _quotas) external {
-        // get the gas price
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-
-        // assert that msg.sender has enough gas to execute the method
-        require(
-            address(msg.sender).balance >=
-                GAS_USED_REQ_WITHDRAW * uint256(gasPrice),
-            "sender has not enough gas"
-        );
-
+    function requestWithdraw(uint256 _quotas)
+        external
+        enoughGas(GAS_USED_REQ_WITHDRAW)
+    {
         // check if user has requested amount
         require(
             _investments[msg.sender].quotas > 0 &&
@@ -238,6 +230,7 @@ contract StrategyRecursiveFarming is
 
         // rest the amount repayed of investments
         uint256 amount = _quotas * _getQuotaPrice();
+        // uint256 quotas = _amount * _getQuotaPrice();
         _investments[msg.sender].amount -= amount;
         _investments[msg.sender].quotas -= _quotas;
 
@@ -249,16 +242,11 @@ contract StrategyRecursiveFarming is
     }
 
     // method for withdraw and transfer tokens to the users
-    function withdraw(address _userAddr, uint256 _amount) external onlyOwner {
-        // get the gas price
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-
-        // assert that msg.sender has enough gas to execute the method
-        require(
-            address(msg.sender).balance > GAS_USED_WITHDRAW * uint256(gasPrice),
-            "sender has not enough gas"
-        );
-
+    function withdraw(address _userAddr, uint256 _amount)
+        external
+        onlyOwner
+        enoughGas(GAS_USED_WITHDRAW)
+    {
         // withdraw token amount from aave, to the userAddr
         aavePool.withdraw(address(token), _amount, _userAddr);
 
@@ -267,8 +255,12 @@ contract StrategyRecursiveFarming is
     }
 
     // method for claiming rewards in aave
-    function claimRewards() external onlyOwner {
+    function claimRewards() external onlyOwner enoughGas(GAS_USED_CLAIM) {
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
+    }
+
+    function getAPY() external view onlyOwner returns (uint256) {
+        return aavePool.getReserveNormalizedIncome(address(this));
     }
 
     //
@@ -299,7 +291,7 @@ contract StrategyRecursiveFarming is
             totalDebtBase -
             totalInvested;
 
-        uint256 quotaPrice = BASE_QUOTA + profit;
+        uint256 quotaPrice = BASE_QUOTA + ((profit * 100) / wavaxTotalSupply);
         return quotaPrice;
     }
 
@@ -327,9 +319,9 @@ contract StrategyRecursiveFarming is
         require(status != StrategyStatus.Done, "The strategy is completed");
 
         if (status == StrategyStatus.Borrow) {
-            borrow();
+            _borrow();
         } else if (status == StrategyStatus.Supply) {
-            supply();
+            _supply();
         }
         // update the last time that the keeper executed the function
         lastTimestamp = block.timestamp;
