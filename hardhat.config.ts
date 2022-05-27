@@ -73,7 +73,11 @@ subtask("dfp-main-get-strategies", "Get strategies of main contract")
     // get strategies
     const [names, addreses] = await contract.getStrategies();
     const strategies = names.reduce(
-      (arr: { name: string; address: string }[], name, index) => {
+      (
+        arr: { name: string; address: string }[],
+        name: string,
+        index: number
+      ) => {
         const address = addreses[index];
         return [...arr, { name, address }];
       },
