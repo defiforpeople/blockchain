@@ -10,7 +10,6 @@ import {
 import { getWeth } from "../../../utils/helpers/get-weth";
 import { deposit } from "./deposit";
 import { reqWithdraw } from "./withdraw";
-import { claimRewardToken } from "./claimRewards";
 const logger = require("pino")();
 
 // defined constants
@@ -31,35 +30,31 @@ const main = async () => {
 
   // get and print WAVAX balance before executing
   let wavaxBalance = await token.balanceOf(wallet.address);
-  await logger.info(
+  logger.info(
     `Our amount of WAVAX in the wallet before execution is ${wavaxBalance}`
   );
 
   // if we don't have enough WAVAX in the wallet, we'll wrapp it from our AVAX
   if (wavaxBalance < AMOUNT) {
-    await logger.info("Getting WAVAX...");
+    logger.info("Getting WAVAX...");
     await getWeth(wallet.address, AMOUNT.sub(wavaxBalance));
-    await logger.info(
+    logger.info(
       `WAVAX tx completed, our amount is: ${token.balanceOf(wallet.address)}`
     );
   }
 
-  // execute Deposit function from the address sender (in this case, the owner wallet)
-  await logger.info("Doing Deposit...");
-  await deposit(wallet.address, AMOUNT); // Don't have more amount :(
+  // logger.info("Doing Deposit...");
+  // await deposit(wallet.address, AMOUNT);
 
   // execute withdraw from the address sender (in this case, the owner wallet)
-  await logger.info("Requesting Withdraw...");
+  logger.info("Requesting Withdraw...");
   await reqWithdraw(wallet.address, WITHDRAW_AMOUNT);
 
   // get and print WAVAX balance after executing
   wavaxBalance = await token.balanceOf(wallet.address);
-  await logger.info(
+  logger.info(
     `Our amount of WAVAX in the wallet after execution is ${wavaxBalance}`
   );
 };
 
 main();
-// claimRewardToken(); // couldn't be tested because the testnets don't able
-// ## UNUSED METHODS:
-// getGasPrice();

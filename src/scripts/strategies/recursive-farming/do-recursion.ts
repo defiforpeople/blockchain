@@ -1,5 +1,7 @@
 import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
+import { BigNumber } from "ethers";
+import { sleep, minute } from "../../../utils/helpers/sleep";
 // eslint-disable-next-line camelcase
 import { StrategyRecursiveFarming } from "../../../typechain";
 const logger = require("pino")();
@@ -8,8 +10,13 @@ const logger = require("pino")();
 const { CONTRACT_ADDRESS } = process.env;
 const GAS_LIMIT = 2074040;
 
-// TODO(nb): implement cron jobs for execuitng doRecursion() automatically
-// method for executing recursion based on the contract status (supply or borrow)
+// define constants for possible smart contract status
+export enum Status {
+  Borrow,
+  Supply,
+  Done,
+}
+
 export async function doRecursion(): Promise<void> {
   // get the owner wallet
   const [wallet] = await ethers.getSigners();
@@ -23,58 +30,46 @@ export async function doRecursion(): Promise<void> {
   ) as StrategyRecursiveFarming;
 
   try {
-    // define constants for possible smart contract status
-    const borrow = 0;
-    const supply = 1;
-    const done = 2;
-
     // print the strategy status
     let strategyStatus = await strategy.viewStatus();
-    await logger.info(`The status of the strategy is ${strategyStatus}`);
+    logger.info(`The status of the strategy is ${strategyStatus}`);
 
     // if the status is done, recursion is not necessary
-    if (strategyStatus === done) {
+    if (strategyStatus === Status.Done) {
       logger.info("The strategy is in DONE status");
       return;
     }
 
-    // // TODO(nb): question: don't know if calculating the owner wallet gas is necessary
-    // if (
-    //   (await strategy.gasNeeded({
-    //     from: wallet.address,
-    //     gasLimit: GAS_LIMIT,
-    //   })) > BigNumber.from("0")
-    // ) {
-    //   // TODO(nb): method for adding gas to the wallet owner
-    //   logger.info("The owner wallet hasn't enough gas!");
-    //   return;
-    // }
-
     // start execution of the recursion
-    await logger.info("Executing Recursion function...");
+    logger.info("Executing Recursion function...");
     const tx = await strategy.doRecursion({
       from: wallet.address,
       gasLimit: GAS_LIMIT,
     });
     await tx.wait();
+    logger.info("Recursion function Executed");
 
-    // get and print the strategy status
+    // get and the strategy status
     strategyStatus = await strategy.viewStatus();
-    await logger.info(`The status of the strategy is ${strategyStatus}`);
 
     // if the status if supply, then execute again doRecursion()
-    if (strategyStatus === supply) {
-      await logger.info("Executing Supply...");
+    if (strategyStatus === Status.Supply) {
+      logger.info(
+        `The status of the strategy is (1 = SUPPLY) ${strategyStatus}`
+      );
+      logger.info("Executing Supply...");
       const tx = await strategy.doRecursion({
         from: wallet.address,
         gasLimit: GAS_LIMIT,
       });
       await tx.wait();
+      logger.info("Supply executed");
+
+      // get the strategy status
+      strategyStatus = await strategy.viewStatus();
     }
 
-    // get and print the strategy status
-    strategyStatus = await strategy.viewStatus();
-    await logger.info(`The status of the strategy is ${strategyStatus}`);
+    logger.info(`The status of the strategy is (2 = DONE) ${strategyStatus}`);
   } catch (err) {
     logger.error(err);
   }

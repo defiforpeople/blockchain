@@ -8,7 +8,6 @@ import {
   IERC20,
   StrategyRecursiveFarming,
 } from "../../../typechain";
-import { doRecursion } from "./do-recursion";
 const logger = require("pino")();
 
 // defined constants
@@ -35,24 +34,20 @@ export async function deposit(
   )) as IERC20;
 
   // make approve tx to erc20 token contract and wait confirmation
-  await logger.info("Approving...");
+  logger.info("Approving...");
   const tx = await token.approve(`${CONTRACT_ADDRESS}`, amount, {
     from: userAddr,
     gasLimit: GAS_LIMIT,
   });
   await tx.wait();
-  await logger.info("Approved...");
+  logger.info("Approved...");
 
   // execute deposit() in the strategy contract
-  await logger.info("Depositing...");
+  logger.info("Depositing...");
   const depositTx = await strategy.deposit(amount, {
     from: userAddr,
     gasLimit: GAS_LIMIT,
   });
   await depositTx.wait();
-  await logger.info("Deposited...");
-
-  logger.info("Going to Recursion function....");
-  // call function for executing recursion
-  await doRecursion();
+  logger.info("Deposited...");
 }

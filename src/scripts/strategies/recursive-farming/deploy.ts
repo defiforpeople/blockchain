@@ -12,6 +12,7 @@ const {
 // run script for deploy
 (async () => {
   try {
+    const keeperInterval = 300; // seconds
     logger.info(`Deploying the contract...`);
     const StrategyContract = await ethers.getContractFactory(
       "StrategyRecursiveFarming"
@@ -21,7 +22,7 @@ const {
       GAS_DATA_FEED,
       WRAPPED_NATIVE_TOKEN_ADDRESS,
       REWARDS_EMISSION_MANAGER,
-      300
+      keeperInterval
     );
     logger.info(`Strategy contract deployed to: ${contract.address}`);
   } catch (err) {
