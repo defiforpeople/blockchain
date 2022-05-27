@@ -54,7 +54,7 @@ contract StrategyRecursiveFarming is
     // define investments information
     mapping(address => Invest) public _investments;
 
-    // status that marks the next step to do in the strategy for keeper
+    // status that marks the next step to do in the strategy
     enum StrategyStatus {
         Borrow,
         Supply,
@@ -75,18 +75,19 @@ contract StrategyRecursiveFarming is
         aavePool = IPool(_aavePoolAddr);
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
-        rewardsManager = IRewardsController(_aaveRewardsManager);
-        interval = _interval;
-        lastTimestamp = block.timestamp;
-        tokenAddresses.push(_wavaxAddr);
-        wavaxTotalSupply = token.totalSupply();
+        rewardsManager = IRewardsController(_aaveRewardsManager); // for claiming rewards
+        interval = _interval; // for keeper logic
+        lastTimestamp = block.timestamp; // for keeper logic
+        tokenAddresses.push(_wavaxAddr); // token for claiming rewards
+        wavaxTotalSupply = token.totalSupply(); // for getQuotaPrice logic
     }
 
-    modifier enoughGas(uint256 gasUsed) {
+    // modifier for calculating if the msg.sender has enough gas based on the gas needed per function
+    modifier enoughGas(uint256 gasNeede) {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
         require(
-            address(msg.sender).balance >= gasUsed * uint256(gasPrice),
+            address(msg.sender).balance >= gasNeede * uint256(gasPrice),
             "sender has not enough gas"
         );
         _;
@@ -259,11 +260,12 @@ contract StrategyRecursiveFarming is
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
     }
 
+    // method for getting the APY from AAVE
     function getAPY() external view onlyOwner returns (uint256) {
         return aavePool.getReserveNormalizedIncome(address(this));
     }
 
-    //
+    // method for calculating the quota quantity based on the deposited aomunt
     function getQuotaQty(uint256 _amount)
         external
         view
@@ -273,24 +275,29 @@ contract StrategyRecursiveFarming is
         return _getQuotaQty(_amount);
     }
 
+    // method for getting the quota price
     function getQuotaPrice() external view onlyOwner returns (uint256) {
         return _getQuotaPrice();
     }
 
+    // method for getting the quota quantity based on the adeposited amount
     function _getQuotaQty(uint256 _amount) internal view returns (uint256) {
         uint256 quotasQuantity = _amount / _getQuotaPrice();
         return quotasQuantity;
     }
 
+    // method for calculating the quota price (based on the profit of the strategy)
     function _getQuotaPrice() internal view returns (uint256) {
         (uint256 totalCollateralBase, uint256 totalDebtBase, , , , ) = aavePool
             .getUserAccountData(address(this));
 
+        // calculate profit
         uint256 profit = totalCollateralBase +
             token.balanceOf(address(this)) -
             totalDebtBase -
             totalInvested;
 
+        // normalized profit + BASE_QUOTA is for avoid quotaPrice to be 0
         uint256 quotaPrice = BASE_QUOTA + ((profit * 100) / wavaxTotalSupply);
         return quotaPrice;
     }
