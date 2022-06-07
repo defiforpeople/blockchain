@@ -13,6 +13,12 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
+error Raffle__NotEnoughGas();
+error Raffle__NotEnoughBalance();
+error Raffle__NotEnoughQuotas();
+error Raffle__UpkeepNotNeeded(uint256 raffleState);
+error Raffle__IsDone();
+
 contract StrategyRecursiveFarming is
     Pausable,
     Ownable,
@@ -20,19 +26,19 @@ contract StrategyRecursiveFarming is
     KeeperCompatibleInterface
 {
     // interfaces
-    IERC20 public token;
-    IPool private aavePool;
-    AggregatorV3Interface private gasPriceFeed;
-    IRewardsController public rewardsManager;
+    IERC20 private immutable token;
+    IPool private immutable aavePool;
+    AggregatorV3Interface private immutable gasPriceFeed;
+    IRewardsController private immutable rewardsManager;
 
     // internal
     uint256 private investmentAmount;
     StrategyStatus private status;
     uint256 private lastTimestamp;
-    uint256 public interval;
+    uint256 private interval;
     uint256 public totalInvested;
-    address[] public tokenAddresses;
-    uint256 public wavaxTotalSupply;
+    address[] private tokenAddresses;
+    uint256 private immutable wavaxTotalSupply;
 
     // constants
     uint256 private constant GAS_USED_DEPOSIT = 345304;
@@ -83,23 +89,21 @@ contract StrategyRecursiveFarming is
     }
 
     // modifier for calculating if the msg.sender has enough gas based on the gas needed per function
-    modifier enoughGas(uint256 gasNeede) {
+    modifier enoughGas(uint256 gasNeeded) {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-        require(
-            address(msg.sender).balance >= gasNeede * uint256(gasPrice),
-            "sender has not enough gas"
-        );
+        if (address(msg.sender).balance < gasNeeded * uint256(gasPrice)) {
+            revert Raffle__NotEnoughGas();
+        }
         _;
     }
 
     // method defined for the user to make an supply, and we save the investment amount with his address
     function deposit(uint256 _amount) external enoughGas(GAS_USED_DEPOSIT) {
         // assert that msg.sender has enough gas to execute the method
-        require(
-            token.balanceOf(address(msg.sender)) >= _amount,
-            "sender has not enough balance"
-        );
+        if (token.balanceOf(address(msg.sender)) < _amount) {
+            revert Raffle__NotEnoughBalance();
+        }
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), _amount);
 
@@ -205,7 +209,10 @@ contract StrategyRecursiveFarming is
 
     // method for executing the loop, based on the status of the contract
     function doRecursion() external onlyOwner {
-        require(status != StrategyStatus.Done, "The strategy is completed");
+        if (status != StrategyStatus.Done) {
+            revert Raffle__IsDone();
+        }
+
         if (status == StrategyStatus.Borrow) {
             _borrow();
         } else if (status == StrategyStatus.Supply) {
@@ -223,12 +230,12 @@ contract StrategyRecursiveFarming is
         enoughGas(GAS_USED_REQ_WITHDRAW)
     {
         // check if user has requested amount
-        require(
+        if (
             _investments[msg.sender].quotas > 0 &&
-                _investments[msg.sender].quotas >= _quotas,
-            "No balance for requested amount"
-        );
-
+            _investments[msg.sender].quotas >= _quotas
+        ) {
+            revert Raffle__NotEnoughQuotas();
+        }
         // rest the amount repayed of investments
         uint256 amount = _quotas * _getQuotaPrice();
         // uint256 quotas = _amount * _getQuotaPrice();
@@ -304,9 +311,9 @@ contract StrategyRecursiveFarming is
 
     // method that uses keeper for know if it has to executo performUpkeep() or not
     function checkUpkeep(
-        bytes calldata /* checkData */
+        bytes memory /* checkData */
     )
-        external
+        public
         view
         override
         returns (
@@ -323,6 +330,10 @@ contract StrategyRecursiveFarming is
     function performUpkeep(
         bytes calldata /* performData */
     ) external override {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        if (!upkeepNeeded) {
+            revert Raffle__UpkeepNotNeeded(uint256(status));
+        }
         require(status != StrategyStatus.Done, "The strategy is completed");
 
         if (status == StrategyStatus.Borrow) {
