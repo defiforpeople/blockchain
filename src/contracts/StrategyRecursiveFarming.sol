@@ -208,7 +208,7 @@ contract StrategyRecursiveFarming is
     // method for executing the loop, based on the status of the contract
     function doRecursion() external onlyOwner {
         if (
-            status != StrategyStatus.Done || status != StrategyStatus.Pristine
+            status == StrategyStatus.Done || status == StrategyStatus.Pristine
         ) {
             revert Error__RecursionNotNeeded(uint256(status));
         }
