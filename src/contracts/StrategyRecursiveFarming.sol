@@ -18,7 +18,7 @@ error Error__NotEnoughGas();
 error Error__NotEnoughBalance();
 error Error__NotEnoughQuotas();
 error Error__UpkeepNotNeeded(uint256 raffleState);
-error Error__StrategyIsDone();
+error Error__RecursionNotNeeded(uint256 raffleState);
 
 contract StrategyRecursiveFarming is
     Pausable,
@@ -63,6 +63,7 @@ contract StrategyRecursiveFarming is
 
     // status that marks the next step to do in the strategy
     enum StrategyStatus {
+        Pristine,
         Borrow,
         Supply,
         Done
@@ -83,6 +84,7 @@ contract StrategyRecursiveFarming is
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
         rewardsManager = IRewardsController(_aaveRewardsManager); // for claiming rewards
+        status = StrategyStatus.Pristine;
         interval = _interval; // for keeper logic
         lastTimestamp = block.timestamp; // for keeper logic
         tokenAddresses.push(_wavaxAddr); // token for claiming rewards
@@ -203,15 +205,12 @@ contract StrategyRecursiveFarming is
         status = StrategyStatus.Borrow;
     }
 
-    // this method returns the status of the strategy
-    function viewStatus() external view onlyOwner returns (StrategyStatus) {
-        return status;
-    }
-
     // method for executing the loop, based on the status of the contract
     function doRecursion() external onlyOwner {
-        if (status != StrategyStatus.Done) {
-            revert Error__StrategyIsDone();
+        if (
+            status != StrategyStatus.Done || status != StrategyStatus.Pristine
+        ) {
+            revert Error__RecursionNotNeeded(uint256(status));
         }
 
         if (status == StrategyStatus.Borrow) {
@@ -219,10 +218,6 @@ contract StrategyRecursiveFarming is
         } else if (status == StrategyStatus.Supply) {
             _supply();
         }
-    }
-
-    function quotasPerAddress() external view returns (uint256) {
-        return _investments[msg.sender].quotas;
     }
 
     // method defined for the user can withdraw from the strategy
@@ -266,26 +261,6 @@ contract StrategyRecursiveFarming is
     // method for claiming rewards in aave
     function claimRewards() external onlyOwner enoughGas(GAS_USED_CLAIM) {
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
-    }
-
-    // method for getting the APY from AAVE
-    function getAPY() external view onlyOwner returns (uint256) {
-        return aavePool.getReserveNormalizedIncome(address(this));
-    }
-
-    // method for calculating the quota quantity based on the deposited aomunt
-    function getQuotaQty(uint256 _amount)
-        external
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        return _getQuotaQty(_amount);
-    }
-
-    // method for getting the quota price
-    function getQuotaPrice() external view onlyOwner returns (uint256) {
-        return _getQuotaPrice();
     }
 
     // method for getting the quota quantity based on the adeposited amount
@@ -351,13 +326,46 @@ contract StrategyRecursiveFarming is
         interval = _interval;
     }
 
-    /* Other view functions */
+    /* View functions */
 
-    function viewLastTimestamp() external view onlyOwner returns (uint256) {
+    // method for calculating the quota quantity based on the deposited aomunt
+    function getQuotaQty(uint256 _amount)
+        external
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        return _getQuotaQty(_amount);
+    }
+
+    function getQuotaPrice() external view onlyOwner returns (uint256) {
+        return _getQuotaPrice();
+    }
+
+    // method for getting the APY from AAVE
+    function getAPY() external view onlyOwner returns (uint256) {
+        return aavePool.getReserveNormalizedIncome(address(this));
+    }
+
+    // amount of quotas per address
+    function quotasPerAddress() external view returns (uint256) {
+        return _investments[msg.sender].quotas;
+    }
+
+    // this method returns the status of the strategy
+    function getStatus() external view onlyOwner returns (StrategyStatus) {
+        return status;
+    }
+
+    function getLastTimestamp() external view onlyOwner returns (uint256) {
         return lastTimestamp;
     }
 
-    function viewInterval() external view onlyOwner returns (uint256) {
+    function getInterval() external view onlyOwner returns (uint256) {
         return interval;
+    }
+
+    function getMaxSupply() external view returns (uint256) {
+        return wavaxTotalSupply;
     }
 }
