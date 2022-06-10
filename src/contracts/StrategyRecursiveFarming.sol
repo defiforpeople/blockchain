@@ -13,11 +13,12 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
-error Raffle__NotEnoughGas();
-error Raffle__NotEnoughBalance();
-error Raffle__NotEnoughQuotas();
-error Raffle__UpkeepNotNeeded(uint256 raffleState);
-error Raffle__IsDone();
+// errors
+error Error__NotEnoughGas();
+error Error__NotEnoughBalance();
+error Error__NotEnoughQuotas();
+error Error__UpkeepNotNeeded(uint256 raffleState);
+error Error__StrategyIsDone();
 
 contract StrategyRecursiveFarming is
     Pausable,
@@ -37,7 +38,7 @@ contract StrategyRecursiveFarming is
     uint256 private lastTimestamp;
     uint256 private interval;
     uint256 public totalInvested;
-    address[] private tokenAddresses;
+    address[] public tokenAddresses;
     uint256 private immutable wavaxTotalSupply;
 
     // constants
@@ -93,7 +94,7 @@ contract StrategyRecursiveFarming is
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
         if (address(msg.sender).balance < gasNeeded * uint256(gasPrice)) {
-            revert Raffle__NotEnoughGas();
+            revert Error__NotEnoughGas();
         }
         _;
     }
@@ -102,7 +103,7 @@ contract StrategyRecursiveFarming is
     function deposit(uint256 _amount) external enoughGas(GAS_USED_DEPOSIT) {
         // assert that msg.sender has enough gas to execute the method
         if (token.balanceOf(address(msg.sender)) < _amount) {
-            revert Raffle__NotEnoughBalance();
+            revert Error__NotEnoughBalance();
         }
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), _amount);
@@ -210,7 +211,7 @@ contract StrategyRecursiveFarming is
     // method for executing the loop, based on the status of the contract
     function doRecursion() external onlyOwner {
         if (status != StrategyStatus.Done) {
-            revert Raffle__IsDone();
+            revert Error__StrategyIsDone();
         }
 
         if (status == StrategyStatus.Borrow) {
@@ -234,7 +235,7 @@ contract StrategyRecursiveFarming is
             _investments[msg.sender].quotas > 0 &&
             _investments[msg.sender].quotas >= _quotas
         ) {
-            revert Raffle__NotEnoughQuotas();
+            revert Error__NotEnoughQuotas();
         }
         // rest the amount repayed of investments
         uint256 amount = _quotas * _getQuotaPrice();
@@ -332,7 +333,7 @@ contract StrategyRecursiveFarming is
     ) external override {
         (bool upkeepNeeded, ) = checkUpkeep("");
         if (!upkeepNeeded) {
-            revert Raffle__UpkeepNotNeeded(uint256(status));
+            revert Error__UpkeepNotNeeded(uint256(status));
         }
         require(status != StrategyStatus.Done, "The strategy is completed");
 
@@ -348,5 +349,15 @@ contract StrategyRecursiveFarming is
     // method for updating keeper interval
     function updateInterval(uint256 _interval) external onlyOwner {
         interval = _interval;
+    }
+
+    /* Other view functions */
+
+    function viewLastTimestamp() external view onlyOwner returns (uint256) {
+        return lastTimestamp;
+    }
+
+    function viewInterval() external view onlyOwner returns (uint256) {
+        return interval;
     }
 }
