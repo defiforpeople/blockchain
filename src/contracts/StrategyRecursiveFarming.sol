@@ -13,6 +13,13 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 
+// errors
+error Error__NotEnoughGas();
+error Error__NotEnoughBalance();
+error Error__NotEnoughQuotas();
+error Error__UpkeepNotNeeded(uint256 raffleState);
+error Error__RecursionNotNeeded(uint256 raffleState);
+
 contract StrategyRecursiveFarming is
     Pausable,
     Ownable,
@@ -20,19 +27,19 @@ contract StrategyRecursiveFarming is
     KeeperCompatibleInterface
 {
     // interfaces
-    IERC20 public token;
-    IPool private aavePool;
-    AggregatorV3Interface private gasPriceFeed;
-    IRewardsController public rewardsManager;
+    IERC20 private immutable token;
+    IPool private immutable aavePool;
+    AggregatorV3Interface private immutable gasPriceFeed;
+    IRewardsController private immutable rewardsManager;
 
     // internal
     uint256 private investmentAmount;
     StrategyStatus private status;
     uint256 private lastTimestamp;
-    uint256 public interval;
+    uint256 private interval;
     uint256 public totalInvested;
     address[] public tokenAddresses;
-    uint256 public wavaxTotalSupply;
+    uint256 private immutable wavaxTotalSupply;
 
     // constants
     uint256 private constant GAS_USED_DEPOSIT = 345304;
@@ -56,6 +63,7 @@ contract StrategyRecursiveFarming is
 
     // status that marks the next step to do in the strategy
     enum StrategyStatus {
+        Pristine,
         Borrow,
         Supply,
         Done
@@ -76,6 +84,7 @@ contract StrategyRecursiveFarming is
         gasPriceFeed = AggregatorV3Interface(_gasPriceFeedAddr);
         token = IERC20(_wavaxAddr);
         rewardsManager = IRewardsController(_aaveRewardsManager); // for claiming rewards
+        status = StrategyStatus.Pristine;
         interval = _interval; // for keeper logic
         lastTimestamp = block.timestamp; // for keeper logic
         tokenAddresses.push(_wavaxAddr); // token for claiming rewards
@@ -83,23 +92,21 @@ contract StrategyRecursiveFarming is
     }
 
     // modifier for calculating if the msg.sender has enough gas based on the gas needed per function
-    modifier enoughGas(uint256 gasNeede) {
+    modifier enoughGas(uint256 gasNeeded) {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-        require(
-            address(msg.sender).balance >= gasNeede * uint256(gasPrice),
-            "sender has not enough gas"
-        );
+        if (address(msg.sender).balance < gasNeeded * uint256(gasPrice)) {
+            revert Error__NotEnoughGas();
+        }
         _;
     }
 
     // method defined for the user to make an supply, and we save the investment amount with his address
     function deposit(uint256 _amount) external enoughGas(GAS_USED_DEPOSIT) {
         // assert that msg.sender has enough gas to execute the method
-        require(
-            token.balanceOf(address(msg.sender)) >= _amount,
-            "sender has not enough balance"
-        );
+        if (token.balanceOf(address(msg.sender)) < _amount) {
+            revert Error__NotEnoughBalance();
+        }
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), _amount);
 
@@ -198,23 +205,19 @@ contract StrategyRecursiveFarming is
         status = StrategyStatus.Borrow;
     }
 
-    // this method returns the status of the strategy
-    function viewStatus() external view onlyOwner returns (StrategyStatus) {
-        return status;
-    }
-
     // method for executing the loop, based on the status of the contract
     function doRecursion() external onlyOwner {
-        require(status != StrategyStatus.Done, "The strategy is completed");
+        if (
+            status == StrategyStatus.Done || status == StrategyStatus.Pristine
+        ) {
+            revert Error__RecursionNotNeeded(uint256(status));
+        }
+
         if (status == StrategyStatus.Borrow) {
             _borrow();
         } else if (status == StrategyStatus.Supply) {
             _supply();
         }
-    }
-
-    function quotasPerAddress() external view returns (uint256) {
-        return _investments[msg.sender].quotas;
     }
 
     // method defined for the user can withdraw from the strategy
@@ -223,12 +226,12 @@ contract StrategyRecursiveFarming is
         enoughGas(GAS_USED_REQ_WITHDRAW)
     {
         // check if user has requested amount
-        require(
+        if (
             _investments[msg.sender].quotas > 0 &&
-                _investments[msg.sender].quotas >= _quotas,
-            "No balance for requested amount"
-        );
-
+            _investments[msg.sender].quotas >= _quotas
+        ) {
+            revert Error__NotEnoughQuotas();
+        }
         // rest the amount repayed of investments
         uint256 amount = _quotas * _getQuotaPrice();
         // uint256 quotas = _amount * _getQuotaPrice();
@@ -260,26 +263,6 @@ contract StrategyRecursiveFarming is
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
     }
 
-    // method for getting the APY from AAVE
-    function getAPY() external view onlyOwner returns (uint256) {
-        return aavePool.getReserveNormalizedIncome(address(this));
-    }
-
-    // method for calculating the quota quantity based on the deposited aomunt
-    function getQuotaQty(uint256 _amount)
-        external
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        return _getQuotaQty(_amount);
-    }
-
-    // method for getting the quota price
-    function getQuotaPrice() external view onlyOwner returns (uint256) {
-        return _getQuotaPrice();
-    }
-
     // method for getting the quota quantity based on the adeposited amount
     function _getQuotaQty(uint256 _amount) internal view returns (uint256) {
         uint256 quotasQuantity = _amount / _getQuotaPrice();
@@ -304,9 +287,9 @@ contract StrategyRecursiveFarming is
 
     // method that uses keeper for know if it has to executo performUpkeep() or not
     function checkUpkeep(
-        bytes calldata /* checkData */
+        bytes memory /* checkData */
     )
-        external
+        public
         view
         override
         returns (
@@ -323,6 +306,10 @@ contract StrategyRecursiveFarming is
     function performUpkeep(
         bytes calldata /* performData */
     ) external override {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        if (!upkeepNeeded) {
+            revert Error__UpkeepNotNeeded(uint256(status));
+        }
         require(status != StrategyStatus.Done, "The strategy is completed");
 
         if (status == StrategyStatus.Borrow) {
@@ -337,5 +324,48 @@ contract StrategyRecursiveFarming is
     // method for updating keeper interval
     function updateInterval(uint256 _interval) external onlyOwner {
         interval = _interval;
+    }
+
+    /* View functions */
+
+    // method for calculating the quota quantity based on the deposited aomunt
+    function getQuotaQty(uint256 _amount)
+        external
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        return _getQuotaQty(_amount);
+    }
+
+    function getQuotaPrice() external view onlyOwner returns (uint256) {
+        return _getQuotaPrice();
+    }
+
+    // method for getting the APY from AAVE
+    function getAPY() external view onlyOwner returns (uint256) {
+        return aavePool.getReserveNormalizedIncome(address(this));
+    }
+
+    // amount of quotas per address
+    function quotasPerAddress() external view returns (uint256) {
+        return _investments[msg.sender].quotas;
+    }
+
+    // this method returns the status of the strategy
+    function getStatus() external view onlyOwner returns (StrategyStatus) {
+        return status;
+    }
+
+    function getLastTimestamp() external view onlyOwner returns (uint256) {
+        return lastTimestamp;
+    }
+
+    function getInterval() external view onlyOwner returns (uint256) {
+        return interval;
+    }
+
+    function getMaxSupply() external view returns (uint256) {
+        return wavaxTotalSupply;
     }
 }
