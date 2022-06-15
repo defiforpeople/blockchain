@@ -12,9 +12,9 @@ import {IRewardsController} from "@aave/periphery-v3/contracts/rewards/interface
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
+import "hardhat/console.sol";
 
 // errors
-error Error__NotEnoughGas();
 error Error__NotEnoughBalance();
 error Error__NotEnoughQuotas();
 error Error__UpkeepNotNeeded(uint256 raffleState);
@@ -45,9 +45,6 @@ contract StrategyRecursiveFarming is
     uint256 private constant GAS_USED_DEPOSIT = 345304;
     uint256 private constant GAS_USED_BORROW = 321838;
     uint256 private constant GAS_USED_SUPPLY = 250410;
-    uint256 private constant GAS_USED_WITHDRAW = 223654;
-    uint256 private constant GAS_USED_REQ_WITHDRAW = 223654;
-    uint256 private constant GAS_USED_CLAIM = 223654;
     uint256 private constant GAS_PRICE_MULTIPLIER = 0; // multiply for 0 for using less amount in a testnet version ;)
     uint256 private constant INTEREST_RATE_MODE = 2; // the borrow is always in variable mode
     uint16 private constant AAVE_REF_CODE = 0;
@@ -91,45 +88,44 @@ contract StrategyRecursiveFarming is
         wavaxTotalSupply = token.totalSupply(); // for getQuotaPrice logic
     }
 
-    // modifier for calculating if the msg.sender has enough gas based on the gas needed per function
-    modifier enoughGas(uint256 gasNeeded) {
-        // get the gas price
-        (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
-        if (address(msg.sender).balance < gasNeeded * uint256(gasPrice)) {
-            revert Error__NotEnoughGas();
-        }
-        _;
-    }
-
     // method defined for the user to make an supply, and we save the investment amount with his address
-    function deposit(uint256 _amount) external enoughGas(GAS_USED_DEPOSIT) {
+    function deposit(uint256 _amount) external {
         // assert that msg.sender has enough gas to execute the method
         if (token.balanceOf(address(msg.sender)) < _amount) {
             revert Error__NotEnoughBalance();
         }
+        console.log("Not reverted");
         // transfer the user amount to this contract (user has to approve before this)
         token.transferFrom(msg.sender, address(this), _amount);
+        console.log("Transferred from");
 
         // save amount in the mapping
         _investments[msg.sender].amount += _amount;
         // calculate and save quotas
+        console.log("Update investments");
         uint256 quotas = _getQuotaQty(_amount);
+        console.log("Get quotas");
         _investments[msg.sender].quotas += quotas;
+        console.log("Update quotas");
         // sum amount to totalInvested
         totalInvested += _amount;
+        console.log("Update amount");
 
         // approve and supply liquidity to the protocol
         token.approve(address(aavePool), _amount);
+        console.log("token approved");
         aavePool.supply(address(token), _amount, address(this), AAVE_REF_CODE);
+        console.log("liquidity supplied");
 
         // update the status of the strategy to the next step to do
         status = StrategyStatus.Borrow;
 
         // emit Deposit event
         emit Deposit(msg.sender, _amount, quotas);
+        console.log("All finished");
     }
 
-    function _borrow() internal enoughGas(GAS_USED_BORROW) {
+    function _borrow() internal {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -164,7 +160,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method for supply liquidity to aave
-    function _supply() internal enoughGas(GAS_USED_SUPPLY) {
+    function _supply() internal {
         // get the gas price
         (, int256 gasPrice, , , ) = gasPriceFeed.latestRoundData();
 
@@ -221,10 +217,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method defined for the user can withdraw from the strategy
-    function requestWithdraw(uint256 _quotas)
-        external
-        enoughGas(GAS_USED_REQ_WITHDRAW)
-    {
+    function requestWithdraw(uint256 _quotas) external {
         // check if user has requested amount
         if (
             _investments[msg.sender].quotas > 0 &&
@@ -246,11 +239,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method for withdraw and transfer tokens to the users
-    function withdraw(address _userAddr, uint256 _amount)
-        external
-        onlyOwner
-        enoughGas(GAS_USED_WITHDRAW)
-    {
+    function withdraw(address _userAddr, uint256 _amount) external onlyOwner {
         // withdraw token amount from aave, to the userAddr
         aavePool.withdraw(address(token), _amount, _userAddr);
 
@@ -259,7 +248,7 @@ contract StrategyRecursiveFarming is
     }
 
     // method for claiming rewards in aave
-    function claimRewards() external onlyOwner enoughGas(GAS_USED_CLAIM) {
+    function claimRewards() external onlyOwner {
         rewardsManager.claimAllRewardsToSelf(tokenAddresses);
     }
 
@@ -274,6 +263,8 @@ contract StrategyRecursiveFarming is
         (uint256 totalCollateralBase, uint256 totalDebtBase, , , , ) = aavePool
             .getUserAccountData(address(this));
 
+        console.log("totalCollateralBase: ", totalCollateralBase);
+        console.log("totalDebtBase: ", totalDebtBase);
         // calculate profit
         uint256 profit = totalCollateralBase +
             token.balanceOf(address(this)) -
@@ -368,4 +359,14 @@ contract StrategyRecursiveFarming is
     function getMaxSupply() external view returns (uint256) {
         return wavaxTotalSupply;
     }
+
+    function getGasUsed()
+        external
+        view
+        returns (
+            uint256 GAS_USED_DEPOSIT,
+            uint256 GAS_USED_SUPPLY,
+            uint256 GAS_USED_BORROW
+        )
+    {}
 }
