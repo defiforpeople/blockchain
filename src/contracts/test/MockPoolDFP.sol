@@ -3,6 +3,7 @@ pragma solidity 0.8.10;
 
 import {IPoolAddressesProvider} from "@aave/core-v3/contracts/interfaces/IPoolAddressesProvider.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 contract MockPoolDFP {
     // Reserved storage space to avoid layout collisions.
@@ -58,14 +59,23 @@ contract MockPoolDFP {
         external
         view
         returns (
-            uint256 totalCollateralBase,
-            uint256 totalDebtBase,
-            uint256 availableBorrowsBase,
-            uint256 currentLiquidationThreshold,
-            uint256 ltv,
-            uint256 healthFactor
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256
         )
-    {}
+    {
+        return (
+            totalCollateralBase,
+            totalDebtBase,
+            availableBorrowsBase,
+            currentLiquidationThreshold,
+            ltv,
+            healthFactor
+        );
+    }
 
     function supply(
         address asset,
@@ -88,7 +98,7 @@ contract MockPoolDFP {
         address onBehalfOf
     ) external {
         require(
-            IERC20(asset).balanceOf(msg.sender) >= amount,
+            IERC20(asset).balanceOf(address(this)) >= amount,
             "Fund this mock contract with the amount"
         );
         IERC20(asset).transfer(onBehalfOf, amount);
@@ -100,7 +110,7 @@ contract MockPoolDFP {
         address to
     ) external {
         require(
-            IERC20(asset).balanceOf(msg.sender) >= amount,
+            IERC20(asset).balanceOf((address(this))) >= amount,
             "Fund this mock contract with the amount"
         );
         IERC20(asset).transfer(to, amount);
