@@ -10,7 +10,7 @@ import {
 } from "../typechain";
 import { assert, expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
-import { ethers } from "hardhat";
+import { network, ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
 import { BigNumber, logger, Signer } from "ethers";
 use(waffleChai);
@@ -29,10 +29,8 @@ describe("StrategyRecursiveFarming", () => {
   let mockIncentivesCont: MockIncentivesController;
   let gasPrice: BigNumber;
   let poolMock: MockPoolDFP;
-
-  let userBalance: BigNumber;
-  let ownerBalance: BigNumber;
-  let poolBalance: BigNumber;
+  let gasPriceMultiplier: BigNumber;
+  let deployTimestamp: BigNumber;
 
   enum StrategyStatus {
     Pristine,
@@ -90,29 +88,29 @@ describe("StrategyRecursiveFarming", () => {
     await token.mint(userAddress, ethers.utils.parseEther("1.0"));
     await token.mint(poolMock.address, ethers.utils.parseEther("10.0"));
 
-    // define keeperInterval for deploying the strategy contract
-    keeperInterval = BigNumber.from(300); // define interval for keeper to execute
-
     // get and deploy StrategyRecursiveFarming contract
     const strategyRecursiveFarming = (await ethers.getContractFactory(
       "StrategyRecursiveFarming"
       // eslint-disable-next-line camelcase
     )) as StrategyRecursiveFarming__factory;
 
+    // define keeperInterval for deploying the strategy contract
+    keeperInterval = BigNumber.from(300); // define interval for keeper to execute
+    gasPriceMultiplier = BigNumber.from(1); // define gas price multiplier for testing
+
     strategyContract = await strategyRecursiveFarming.deploy(
       poolMock.address,
       mockV3Aggregator.address,
       token.address,
       mockIncentivesCont.address,
-      keeperInterval
+      keeperInterval,
+      gasPriceMultiplier
     );
     await strategyContract.deployed();
 
-    // get balances
-    userBalance = await token.balanceOf(userAddress);
-    ownerBalance = await token.balanceOf(ownerAddress);
-    poolBalance = await token.balanceOf(poolMock.address);
-
+    deployTimestamp = await strategyContract.getLastTimestamp({
+      from: ownerAddress,
+    });
     // get max supply
     maxSupply = await token.totalSupply();
   });
@@ -121,13 +119,18 @@ describe("StrategyRecursiveFarming", () => {
     it("Initializes the strategy correctly", async () => {
       const status = await strategyContract.getStatus();
       const interval = await strategyContract.getInterval();
-      const lastTimestamp = await strategyContract.getLastTimestamp();
+      const lastTimestamp = await strategyContract.getLastTimestamp({
+        from: ownerAddress,
+      });
       const maxSupplyContract = await strategyContract.getMaxSupply();
+      const gasPriceMultiplierContract =
+        await strategyContract.getGasPriceMultiplier();
 
       expect(status).to.equal(StrategyStatus.Pristine);
       expect(interval).to.equal(keeperInterval);
       assert(lastTimestamp > BigNumber.from(0));
       expect(maxSupplyContract.toString()).to.equal(maxSupply.toString());
+      expect(gasPriceMultiplierContract).to.equal(gasPriceMultiplier);
     });
   });
 
@@ -139,7 +142,7 @@ describe("StrategyRecursiveFarming", () => {
       ).to.be.revertedWith("Error__NotEnoughBalance()");
     });
 
-    it("tests deposit makes 'transferFrom' successfully", async () => {
+    it("makes 'transferFrom' successfully", async () => {
       const amount = ethers.utils.parseEther("0.1");
       const firstBalance = await token.balanceOf(ownerAddress);
 
@@ -149,7 +152,438 @@ describe("StrategyRecursiveFarming", () => {
       await strategyContract.deposit(amount, { from: ownerAddress });
       const secondBalance = await token.balanceOf(ownerAddress);
 
+      logger.info(`firstBalance: ${firstBalance.toString()}`);
+      logger.info(`secondBalance: ${secondBalance.toString()}`);
       expect(firstBalance.sub(amount)).to.equal(secondBalance);
+    });
+
+    it("updates contract status and total invested correctly, and quotas", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      const status = await strategyContract.getStatus();
+      const totalInvested = await strategyContract.getTotalInvested();
+      const quota = await strategyContract.getQuotasPerAddress(ownerAddress);
+
+      expect(status).to.equal(StrategyStatus.Borrow);
+      expect(totalInvested.toString()).to.equal(amount.toString());
+      // Only test if updates quotas here. Then will be tested if it is correct in future quota's functions tests
+      assert(quota > BigNumber.from(0));
+    });
+    it("emits correctly Deposit event", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+
+      await expect(
+        strategyContract.deposit(amount, { from: ownerAddress })
+      ).to.emit(strategyContract, "Deposit");
+    });
+  });
+
+  describe("checkUpkeep", () => {
+    it("Should return false if status is Pristine but interval is ok", async () => {
+      // callStatic is for getting variable of a function that reuturns nothing
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        []
+      );
+
+      assert(!upkeepNeeded);
+    });
+
+    it("Should return false if status is Done but interval is ok", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from(0); // For updating status to Done and not to Borrow
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep([]);
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        []
+      );
+      assert(!upkeepNeeded);
+    });
+
+    it("should return false if interval is not reach yet but status is Borrow", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      // The status of the strategy should be Borrow in this point
+      const status = await strategyContract.getStatus();
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        "0x"
+      );
+
+      expect(status).to.equal(StrategyStatus.Borrow);
+      assert(!upkeepNeeded);
+    });
+
+    it("should return false if interval is not reach yet but status is Supply", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        "0x"
+      );
+      const status = await strategyContract.getStatus();
+
+      expect(status).to.be.equal(StrategyStatus.Supply);
+      assert(!upkeepNeeded);
+    });
+
+    it("should return true if interval is reach and status is Borrow", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        "0x"
+      );
+
+      assert(upkeepNeeded);
+    });
+  });
+
+  describe("performUpkeep", () => {
+    it("should revert if checkUpkeep is false and shouldn't update '_lastTimestamp'", async () => {
+      const status = await strategyContract.getStatus();
+      const lastTimestamp = (
+        await strategyContract.getLastTimestamp({
+          from: ownerAddress,
+        })
+      ).add(1); // what the execution of perform upkeep lasts is 1 sec
+      const firstTimestamp = await strategyContract.getLastTimestamp();
+
+      await expect(strategyContract.performUpkeep([])).to.be.revertedWith(
+        `Error__UpkeepNotNeeded(${status}, ${lastTimestamp.sub(
+          deployTimestamp
+        )}, ${keeperInterval})`
+      );
+      expect(await strategyContract.getLastTimestamp()).to.eq(firstTimestamp);
+    });
+
+    it("Should borrow in the protocol and update status to Supply and should update '_lastTimestamp'", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await expect(() =>
+        strategyContract.performUpkeep("0x")
+      ).to.changeTokenBalance(
+        token,
+        strategyContract,
+        mockAvailableBorrowsBase
+      );
+      assert((await strategyContract.getStatus()) === StrategyStatus.Supply);
+    });
+
+    it("Should execute supply to aave, and update status to Borrow and should update '_lastTimestamp'", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      const contractBalance = await token.balanceOf(strategyContract.address);
+      const firstTimestamp = await strategyContract.getLastTimestamp();
+
+      await expect(() =>
+        strategyContract.performUpkeep("0x")
+      ).to.changeTokenBalance(token, poolMock, contractBalance);
+      expect(await strategyContract.getLastTimestamp()).to.be.gt(
+        firstTimestamp
+      );
+      assert((await strategyContract.getStatus()) === StrategyStatus.Borrow);
+    });
+
+    it("Should update status from Borrow to Done when borrowAvailable is not enough and should update '_lastTimestamp'", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      let mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      mockAvailableBorrowsBase = BigNumber.from("0");
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      const firstTimestamp = await strategyContract.getLastTimestamp();
+      await strategyContract.performUpkeep("0x");
+      const secondTimestamp = await strategyContract.getLastTimestamp();
+
+      expect(secondTimestamp).to.be.gt(firstTimestamp);
+      assert((await strategyContract.getStatus()) === StrategyStatus.Done);
+    });
+
+    it("Should update status from Supply to Done when the balance is not enough and should update '_lastTimestamp'", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      // we mock the gas price in order to make the balance of the strategy contract to be insufficient
+      const contractBalance = await token.balanceOf(strategyContract.address);
+      gasPrice = contractBalance.add("1");
+      logger.info("gasPrice (test): ", gasPrice);
+      await mockV3Aggregator.updateAnswer(gasPrice);
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      const firstTimestamp = await strategyContract.getLastTimestamp();
+      await strategyContract.performUpkeep("0x");
+      const secondTimestamp = await strategyContract.getLastTimestamp();
+
+      expect(secondTimestamp).to.be.gt(firstTimestamp);
+      assert((await strategyContract.getStatus()) === StrategyStatus.Done);
     });
   });
 });
