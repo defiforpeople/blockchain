@@ -12,7 +12,8 @@ import { assert, expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { network, ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
-import { BigNumber, logger, Signer } from "ethers";
+import { BigNumber, Signer } from "ethers";
+const logger = require("pino")();
 use(waffleChai);
 
 describe("StrategyRecursiveFarming", () => {
@@ -137,9 +138,11 @@ describe("StrategyRecursiveFarming", () => {
   describe("deposit", () => {
     it("tests revert with enough balance error", async () => {
       const amount = ethers.utils.parseEther("111");
+      const balance = await token.balanceOf(ownerAddress);
+
       await expect(
         strategyContract.deposit(amount, { from: ownerAddress })
-      ).to.be.revertedWith("Error__NotEnoughBalance()");
+      ).to.be.revertedWith(`Error__NotEnoughBalance(${balance})`);
     });
 
     it("makes 'transferFrom' successfully", async () => {
@@ -188,7 +191,7 @@ describe("StrategyRecursiveFarming", () => {
   });
 
   describe("checkUpkeep", () => {
-    it("Should return false if status is Pristine but interval is ok", async () => {
+    it("Should return false if status is Pristine but interval is ok and withdraw is false", async () => {
       // callStatic is for getting variable of a function that reuturns nothing
       await network.provider.send("evm_increaseTime", [
         keeperInterval.toNumber() + 1,
@@ -202,7 +205,7 @@ describe("StrategyRecursiveFarming", () => {
       assert(!upkeepNeeded);
     });
 
-    it("Should return false if status is Done but interval is ok", async () => {
+    it("Should return false if status is Done but interval is ok and status is false", async () => {
       const amount = ethers.utils.parseEther("0.1");
 
       await token.approve(strategyContract.address, amount, {
@@ -330,6 +333,99 @@ describe("StrategyRecursiveFarming", () => {
       );
 
       assert(upkeepNeeded);
+    });
+
+    it("should return false if interval is reach, status is Supply but withdraw is true", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      await strategyContract.performUpkeep("0x");
+
+      const reqPercentage = BigNumber.from("100");
+      await strategyContract.requestWithdraw(reqPercentage, {
+        from: ownerAddress,
+      });
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        "0x"
+      );
+
+      const withdrawing = await strategyContract.getWithdrawStatus({
+        from: ownerAddress,
+      });
+
+      assert(withdrawing);
+      assert(!upkeepNeeded);
+    });
+
+    it("should return false if interval is reach, status is Borrow but withdraw is true", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      // The status of the strategy should be Borrow in this point
+
+      await network.provider.send("evm_increaseTime", [
+        keeperInterval.toNumber() + 1,
+      ]);
+      await network.provider.send("evm_mine", []);
+
+      const reqPercentage = BigNumber.from("100");
+      await strategyContract.requestWithdraw(reqPercentage, {
+        from: ownerAddress,
+      });
+
+      const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
+        "0x"
+      );
+
+      const withdrawing = await strategyContract.getWithdrawStatus({
+        from: ownerAddress,
+      });
+
+      assert(withdrawing);
+      assert(!upkeepNeeded);
     });
   });
 
@@ -584,6 +680,168 @@ describe("StrategyRecursiveFarming", () => {
 
       expect(secondTimestamp).to.be.gt(firstTimestamp);
       assert((await strategyContract.getStatus()) === StrategyStatus.Done);
+    });
+  });
+
+  // Implement aToken in MockPool
+  describe("requestWithdraw", () => {
+    it("Should revert if the percentage for withdraw is zero", async () => {
+      const quotasPercentage = BigNumber.from("0");
+      await expect(
+        strategyContract.requestWithdraw(quotasPercentage, {
+          from: ownerAddress,
+        })
+      ).to.be.revertedWith(`Error__PercentageOutOfRange(${quotasPercentage})`);
+    });
+
+    it("Should revert if the percentage for withdraw is more than one hundred", async () => {
+      const quotasPercentage = BigNumber.from("101");
+      await expect(
+        strategyContract.requestWithdraw(quotasPercentage, {
+          from: ownerAddress,
+        })
+      ).to.be.revertedWith(`Error__PercentageOutOfRange(${quotasPercentage})`);
+    });
+
+    it("Should revert if sender's quotas balance is 0", async () => {
+      const quotasRequested = BigNumber.from("1");
+      // const quotasBalance = await strategyContract.getQuotasPerAddress(
+      //   ownerAddress
+      // );
+      // const quotasToWithdraw = quotasRequested.mul(quotasBalance).div(100);
+      await expect(
+        strategyContract.requestWithdraw(quotasRequested, {
+          from: ownerAddress,
+        })
+      ).to.be.revertedWith(`Error__UserHasZeroQuotas()`);
+    });
+
+    it("should execute the repay from aave to the sender when is the first time", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      const firstQuotas = await strategyContract.getQuotasPerAddress(
+        ownerAddress
+      );
+
+      const reqPercentage = BigNumber.from("100");
+      const tx = await strategyContract.requestWithdraw(reqPercentage, {
+        from: ownerAddress,
+      });
+
+      const secondQuotas = await strategyContract.getQuotasPerAddress(
+        ownerAddress
+      );
+
+      expect(tx).to.changeTokenBalance(token, owner, amount);
+      expect(firstQuotas).gt(secondQuotas);
+    });
+
+    it("should execute the repay from aave to the sender after multiple deposits", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      const amountDeposited = amount;
+
+      const firstQuotas = await strategyContract.getQuotasPerAddress(
+        ownerAddress
+      );
+      const quotasBeforeWithdraw = firstQuotas;
+      const zero = BigNumber.from(0);
+      await poolMock.setUserAccountData(amount, zero, zero, zero, zero, zero);
+
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+      amountDeposited.add(amount);
+
+      const secondQuotas = await strategyContract.getQuotasPerAddress(
+        ownerAddress
+      );
+      quotasBeforeWithdraw.add(secondQuotas);
+
+      const firstBalance = await token.balanceOf(ownerAddress);
+
+      const reqPercentage = BigNumber.from("100");
+
+      const secondBalance = await token.balanceOf(ownerAddress);
+
+      await strategyContract.requestWithdraw(reqPercentage, {
+        from: ownerAddress,
+      });
+      const quotasAfterWithdraw = await strategyContract.getQuotasPerAddress(
+        ownerAddress
+      );
+
+      expect(firstBalance).to.eq(secondBalance);
+      expect(quotasBeforeWithdraw).gt(quotasAfterWithdraw);
+    });
+
+    it("should emit event if the requestWithdraw finishes successfully", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      const reqPercentage = BigNumber.from("100");
+      const tx = await strategyContract.requestWithdraw(reqPercentage, {
+        from: ownerAddress,
+      });
+
+      expect(tx).to.emit(
+        strategyContract,
+        `Withdraw(${ownerAddress}, ${reqPercentage})`
+      );
+    });
+  });
+
+  describe("withdraw", () => {
+    it("should withdraw the requested amount to the address", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      const firstTotalInvested = await strategyContract.getTotalInvested();
+      const reqPercentage = BigNumber.from("100");
+      await strategyContract.requestWithdraw(reqPercentage, {
+        from: ownerAddress,
+      });
+
+      await new Promise((resolve, reject) => {
+        strategyContract.once(
+          "Withdraw",
+          async (userAddr: string, amount: BigNumber, quotas: BigNumber) => {
+            try {
+              logger.info("Withdraw event listened!");
+
+              expect(
+                await strategyContract.withdraw(userAddr, amount, {
+                  from: ownerAddress,
+                })
+              ).to.changeTokenBalance(token, userAddr, amount);
+
+              const secondTotalInvested =
+                await strategyContract.getTotalInvested();
+              assert(firstTotalInvested.sub(secondTotalInvested).eq(amount));
+
+              resolve("");
+            } catch (err) {
+              reject(err);
+            }
+          }
+        );
+      });
     });
   });
 });
