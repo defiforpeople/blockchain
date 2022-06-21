@@ -19,6 +19,8 @@ contract MockPoolDFP {
     uint256 public ltv;
     uint256 public healthFactor;
 
+    mapping(address => uint256) public balances;
+
     function initialize(address provider) external {
         _addressesProvider = provider;
     }
@@ -87,6 +89,7 @@ contract MockPoolDFP {
             IERC20(asset).balanceOf(msg.sender) >= amount,
             "Not enough amount"
         );
+        balances[msg.sender] += amount;
         IERC20(asset).transferFrom(onBehalfOf, address(this), amount);
     }
 
@@ -101,6 +104,7 @@ contract MockPoolDFP {
             IERC20(asset).balanceOf(address(this)) >= amount,
             "Fund this mock contract with the amount"
         );
+        balances[msg.sender] -= amount;
         IERC20(asset).transfer(onBehalfOf, amount);
     }
 
@@ -108,23 +112,30 @@ contract MockPoolDFP {
         address asset,
         uint256 amount,
         address to
-    ) external {
+    ) external returns (uint256) {
         require(
             IERC20(asset).balanceOf((address(this))) >= amount,
             "Fund this mock contract with the amount"
         );
+        balances[msg.sender] -= amount;
         IERC20(asset).transfer(to, amount);
+
+        return amount;
     }
 
     function repayWithATokens(
         address asset,
         uint256 amount,
         uint256 interestRateMode
-    ) external {
+    ) external view returns (uint256) {
         require(
-            IERC20(asset).balanceOf(msg.sender) >= amount,
-            "Not enough amount"
+            IERC20(asset).balanceOf(address(this)) >= amount,
+            "Not enough amount in the pool"
         );
-        IERC20(asset).transferFrom(address(msg.sender), address(this), amount);
+        require(balances[msg.sender] >= amount, "Not enough amount to repay");
+
+        // IERC20(asset).approve(address(msg.sender), amount);
+
+        return amount;
     }
 }
