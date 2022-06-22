@@ -35,18 +35,18 @@ contract StrategyRecursiveFarming is
 {
     using SafeMath for uint256;
     // interfaces
-    IERC20 private immutable token;
-    IPool private immutable aavePool;
-    AggregatorV3Interface private immutable gasPriceFeed;
-    IRewardsController private immutable rewardsManager;
+    IERC20 public immutable token;
+    IPool public immutable aavePool;
+    AggregatorV3Interface public immutable gasPriceFeed;
+    IRewardsController public immutable rewardsManager;
 
     // internal
     uint256 private investmentAmount;
     StrategyStatus private status;
     uint256 private _lastTimestamp;
     uint256 private _interval;
-    uint256 public totalInvested;
-    address[] public tokenAddresses;
+    uint256 private _totalInvested;
+    address[] private _tokenAddresses;
     uint256 private immutable _wavaxTotalSupply;
     uint256 private _quotas;
     uint256 private _gasPriceMultiplier; // multiplier of gas price in if conditionals
@@ -89,7 +89,7 @@ contract StrategyRecursiveFarming is
         status = StrategyStatus.Pristine;
         _interval = interval; // for keeper logic
         _lastTimestamp = block.timestamp; // for keeper logic
-        tokenAddresses.push(_wavaxAddr); // token for claiming rewards
+        _tokenAddresses.push(_wavaxAddr); // token for claiming rewards
         _wavaxTotalSupply = token.totalSupply(); // for getQuotaPrice logic
         _gasPriceMultiplier = gasPriceMultiplier;
     }
@@ -106,8 +106,8 @@ contract StrategyRecursiveFarming is
         // calculate and save quotas
         _quotas = _getQuotaQty(_amount);
         _investments[msg.sender] += _quotas;
-        // sum amount to totalInvested
-        totalInvested += _amount;
+        // sum amount to _totalInvested
+        _totalInvested += _amount;
 
         console.log("quotas: ", _quotas);
         console.log("investmentAmount: ", _amount);
@@ -273,8 +273,8 @@ contract StrategyRecursiveFarming is
 
     // method for withdraw and transfer tokens to the users
     function withdraw(address _userAddr, uint256 _amount) external onlyOwner {
-        // rest amount to totalInvested
-        totalInvested -= _amount;
+        // rest amount to _totalInvested
+        _totalInvested -= _amount;
 
         // once is withdrawed, the strategy will be able to supply or borrow again
         _withdrawing = false;
@@ -286,7 +286,7 @@ contract StrategyRecursiveFarming is
 
     // method for claiming rewards in aave
     function claimRewards() external onlyOwner {
-        rewardsManager.claimAllRewardsToSelf(tokenAddresses);
+        rewardsManager.claimAllRewardsToSelf(_tokenAddresses);
     }
 
     // method for getting the quota quantity based on the adeposited amount
@@ -405,7 +405,7 @@ contract StrategyRecursiveFarming is
     }
 
     function getTotalInvested() external view returns (uint256) {
-        return totalInvested;
+        return _totalInvested;
     }
 
     // this method returns the status of the strategy
@@ -432,6 +432,10 @@ contract StrategyRecursiveFarming is
 
     function getTotalSupply() external view returns (uint256) {
         return _wavaxTotalSupply;
+    }
+
+    function getTokenAddresses() external view returns (address[] memory) {
+        return _tokenAddresses;
     }
 
     // method for getting gas info (for testing purpose)
