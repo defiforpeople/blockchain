@@ -32,6 +32,8 @@ describe("StrategyRecursiveFarming", () => {
   let poolMock: MockPoolDFP;
   let gasPriceMultiplier: BigNumber;
   let deployTimestamp: BigNumber;
+  let aaveRefCode: BigNumber;
+  let interval: BigNumber;
 
   enum StrategyStatus {
     Pristine,
@@ -114,6 +116,8 @@ describe("StrategyRecursiveFarming", () => {
     });
     // get max supply
     maxSupply = await token.totalSupply();
+    aaveRefCode = await strategyContract.getAaveRefCode();
+    interval = await strategyContract.getInterval();
   });
 
   describe("constructor", () => {
@@ -123,7 +127,7 @@ describe("StrategyRecursiveFarming", () => {
       const lastTimestamp = await strategyContract.getLastTimestamp({
         from: ownerAddress,
       });
-      const maxSupplyContract = await strategyContract.getMaxSupply();
+      const maxSupplyContract = await strategyContract.getTotalSupply();
       const gasPriceMultiplierContract =
         await strategyContract.getGasPriceMultiplier();
 
@@ -805,6 +809,15 @@ describe("StrategyRecursiveFarming", () => {
   });
 
   describe("withdraw", () => {
+    it("should revert if the sender isn't the owner", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await expect(
+        strategyContract.withdraw(userAddress, amount, {
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+
     it("should withdraw the requested amount to the address", async () => {
       const amount = ethers.utils.parseEther("0.1");
       await token.approve(strategyContract.address, amount, {
@@ -842,6 +855,275 @@ describe("StrategyRecursiveFarming", () => {
           }
         );
       });
+    });
+  });
+
+  describe("getQuotaQty", () => {
+    it("should return the quotas quantity calculated in the internal function", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      const quotasQty = await strategyContract.getQuotaQty(amount, {
+        from: ownerAddress,
+      });
+      assert(quotasQty._isBigNumber);
+    });
+
+    it("should revert if the sender isn't the owner", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await expect(
+        strategyContract.getQuotaQty(amount, {
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+  });
+
+  describe("_getQuotaQty", () => {
+    it("quotas should be 0 if the amount inserted is zero", async () => {
+      const amount = ethers.utils.parseEther("0");
+      const quotasQty = await strategyContract.getQuotaQty(amount, {
+        from: ownerAddress,
+      });
+
+      logger.info(quotasQty.toString());
+      expect(quotasQty).eq(BigNumber.from(0));
+    });
+
+    it("should return the amount * the quota price as result", async () => {
+      const quotaPrice = await strategyContract.getQuotaPrice({
+        from: ownerAddress,
+      });
+      logger.info(`quotaPrice ${quotaPrice.toString()}`);
+
+      const amount = ethers.utils.parseEther("0.1");
+      const quotasQty = await strategyContract.getQuotaQty(amount, {
+        from: ownerAddress,
+      });
+
+      const quotasExpected = amount.mul(quotaPrice);
+      expect(quotasExpected).eq(quotasQty);
+    });
+  });
+
+  describe("getQuotaPrice", () => {
+    it("should return the quota price calculation of the internal function", async () => {
+      const quotaPrice = await strategyContract.getQuotaPrice({
+        from: ownerAddress,
+      });
+      assert(quotaPrice._isBigNumber);
+    });
+
+    it("should revert if the sender isn't the owner", async () => {
+      await expect(
+        strategyContract.getQuotaPrice({
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+  });
+
+  describe("_getQuotaPrice", () => {
+    it("quota price should be 1 if isn't amount deposited", async () => {
+      const quotaPrice = await strategyContract.getQuotaPrice({
+        from: ownerAddress,
+      });
+      expect(quotaPrice).eq(BigNumber.from(1));
+    });
+
+    it("should calculate properly the quota price", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      // aave user info mock constants
+      const mockTotalCollateralBase = BigNumber.from("6658762878");
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      const contractBalance = await token.balanceOf(strategyContract.address);
+      const totalInvested = await strategyContract.getTotalInvested();
+      const totalSupply = await strategyContract.getTotalSupply();
+
+      // calculations (the same as the contract)
+      const profit = mockTotalCollateralBase.add(contractBalance);
+      const outgoings = profit.sub(totalInvested);
+      const netProfit = profit.sub(outgoings);
+
+      const expectedQuotaPrice = totalSupply.add(netProfit).div(totalSupply);
+      const quotaPrice = await strategyContract.getQuotaPrice({
+        from: ownerAddress,
+      });
+
+      expect(quotaPrice).eq(expectedQuotaPrice);
+    });
+  });
+
+  describe("getAmountFromQuotas", () => {
+    it("should return amount from quotas calculation of internal function", async () => {
+      const quotas = BigNumber.from("12");
+      const amountFromQuotas = await strategyContract.getAmountFromQuotas(
+        quotas,
+        {
+          from: ownerAddress,
+        }
+      );
+      assert(amountFromQuotas._isBigNumber);
+    });
+
+    it("should revert if the sender isn't the owner", async () => {
+      const quotas = BigNumber.from("12");
+      await expect(
+        strategyContract.getAmountFromQuotas(quotas, {
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+  });
+
+  describe("_getAmountFromQuotas", () => {
+    it("should return amount === quotas if nothing is deposited yet, and quotaPrice is equal 1", async () => {
+      const quotas = BigNumber.from("12");
+      const amountFromQuotas = await strategyContract.getAmountFromQuotas(
+        quotas,
+        {
+          from: ownerAddress,
+        }
+      );
+      expect(amountFromQuotas).eq(quotas);
+    });
+
+    it("should return 0 if the quotas value inserted is equal 0", async () => {
+      const quotas = BigNumber.from("0");
+      const amountFromQuotas = await strategyContract.getAmountFromQuotas(
+        quotas,
+        {
+          from: ownerAddress,
+        }
+      );
+      expect(amountFromQuotas).eq(BigNumber.from(0));
+    });
+  });
+
+  describe("setGasPriceMultiplier", () => {
+    it("should revert if the sender isn't the owner", async () => {
+      const gasPrice = BigNumber.from("4");
+      await expect(
+        strategyContract.setGasPriceMultiplier(gasPrice, {
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+
+    it("should update the gasPriceMultiplier", async () => {
+      const gasPriceToUpdate = BigNumber.from("3");
+      await strategyContract.setGasPriceMultiplier(gasPriceToUpdate, {
+        from: ownerAddress,
+      });
+
+      const gasPriceMulAfter = await strategyContract.getGasPriceMultiplier();
+
+      expect(gasPriceMulAfter).eq(gasPriceToUpdate);
+      assert(gasPriceMulAfter !== gasPriceMultiplier);
+    });
+
+    it("shouldn't update if gasPriceMultiplier is the same than before", async () => {
+      const gasPriceToUpdate = gasPriceMultiplier;
+      await strategyContract.setAaveRefCode(gasPriceToUpdate, {
+        from: ownerAddress,
+      });
+
+      const gasPriceMulAfter = await strategyContract.getGasPriceMultiplier();
+
+      expect(gasPriceMulAfter).eq(gasPriceMultiplier);
+    });
+  });
+
+  describe("setAaveRefCode", () => {
+    it("should revert if the sender isn't the owner", async () => {
+      const aaveRefToUpdate = BigNumber.from("2");
+      await expect(
+        strategyContract.setAaveRefCode(aaveRefToUpdate, {
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+
+    it("should update the aaveRefCode", async () => {
+      const aaveRefToUpdate = BigNumber.from("1");
+      await strategyContract.setAaveRefCode(aaveRefToUpdate, {
+        from: ownerAddress,
+      });
+
+      const aaveRefAfter = await strategyContract.getAaveRefCode();
+
+      expect(aaveRefAfter).eq(aaveRefToUpdate);
+      assert(aaveRefAfter !== aaveRefCode);
+    });
+
+    it("shouldn't update if aaveRefCode is the same than before", async () => {
+      const aaveRefToUpdate = aaveRefCode;
+      await strategyContract.setAaveRefCode(aaveRefToUpdate, {
+        from: ownerAddress,
+      });
+
+      const aaveRefAfter = await strategyContract.getAaveRefCode();
+
+      expect(aaveRefAfter).eq(aaveRefCode);
+    });
+  });
+
+  describe("updateInterval", () => {
+    it("should revert if the sender isn't the owner", async () => {
+      const intervalToUpdate = BigNumber.from("600");
+      await expect(
+        strategyContract.updateInterval(intervalToUpdate, {
+          from: userAddress,
+        })
+      ).to.be.reverted;
+    });
+
+    it("should update the interval", async () => {
+      const intervalToUpdate = BigNumber.from("600");
+      await strategyContract.updateInterval(intervalToUpdate, {
+        from: ownerAddress,
+      });
+
+      const intervalAfter = await strategyContract.getInterval();
+
+      expect(intervalAfter).eq(intervalToUpdate);
+      assert(intervalAfter !== interval);
+    });
+
+    it("shouldn't update if interval is the same than before", async () => {
+      const intervalToUpdate = interval;
+      await strategyContract.updateInterval(intervalToUpdate, {
+        from: ownerAddress,
+      });
+
+      const intervalAfter = await strategyContract.getInterval();
+
+      expect(intervalAfter).eq(interval);
     });
   });
 });
