@@ -318,7 +318,7 @@ contract StrategyRecursiveFarming is
         console.log("totalCollateralBase: ", totalCollateralBase);
         console.log("totalDebtBase: ", totalDebtBase);
 
-        // calculate profit
+        // calculate profit (divided in 3 variables because of tryAdd/trySub returns)
         (, uint256 profit) = totalCollateralBase.tryAdd(
             token.balanceOf(address(this))
         );
@@ -338,11 +338,11 @@ contract StrategyRecursiveFarming is
 
     function _getAmountFromQuotas(uint256 _quotaAmount)
         internal
+        view
         returns (uint256)
     {
-        uint256 amount = _quotaAmount * _getQuotaPrice();
-        console.log("amount from quota", amount);
-        return amount;
+        console.log("amount from quota", _quotaAmount * _getQuotaPrice());
+        return _quotaAmount * _getQuotaPrice();
     }
 
     // method for update the _gasPriceMultiplier externally
@@ -366,6 +366,9 @@ contract StrategyRecursiveFarming is
 
     // method for updating keeper _interval
     function updateInterval(uint256 interval) external onlyOwner {
+        if (_interval == interval) {
+            return;
+        }
         _interval = interval;
     }
 
@@ -383,6 +386,19 @@ contract StrategyRecursiveFarming is
 
     function getQuotaPrice() external view onlyOwner returns (uint256) {
         return _getQuotaPrice();
+    }
+
+    function getAmountFromQuotas(uint256 _quotaAmount)
+        external
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        return _getAmountFromQuotas(_quotaAmount);
+    }
+
+    function getAaveRefCode() external view returns (uint256) {
+        return _aaveRefCode;
     }
 
     // method for getting the APY from AAVE
@@ -425,7 +441,7 @@ contract StrategyRecursiveFarming is
         return _interval;
     }
 
-    function getMaxSupply() external view returns (uint256) {
+    function getTotalSupply() external view returns (uint256) {
         return _wavaxTotalSupply;
     }
 
