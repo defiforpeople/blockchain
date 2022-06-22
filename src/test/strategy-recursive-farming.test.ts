@@ -13,6 +13,7 @@ import "@nomiclabs/hardhat-ethers";
 import { network, ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
 import { BigNumber, Signer } from "ethers";
+import { stat } from "fs";
 const logger = require("pino")();
 use(waffleChai);
 
@@ -888,18 +889,72 @@ describe("StrategyRecursiveFarming", () => {
       expect(quotasQty).eq(BigNumber.from(0));
     });
 
-    it("should return the amount * the quota price as result", async () => {
+    it("should return the amount * total supply price as result (when quota price is 1)", async () => {
       const quotaPrice = await strategyContract.getQuotaPrice({
         from: ownerAddress,
       });
-      logger.info(`quotaPrice ${quotaPrice.toString()}`);
 
       const amount = ethers.utils.parseEther("0.1");
       const quotasQty = await strategyContract.getQuotaQty(amount, {
         from: ownerAddress,
       });
 
-      const quotasExpected = amount.mul(quotaPrice);
+      const quotasExpected = amount.mul(maxSupply);
+      expect(quotasExpected).eq(quotasQty);
+      expect(quotaPrice).eq(BigNumber.from(1));
+    });
+
+    it("should return the amount * the quota price as result (when quota price is not 1)", async () => {
+      const [GAS_USED_DEPOSIT, GAS_USED_SUPPLY, ,] =
+        await strategyContract.getGasInfo();
+
+      const amount = ethers.utils.parseEther("0.1");
+      // await token.approve(strategyContract.address, amount, {
+      //   from: ownerAddress,
+      // });
+      // await strategyContract.deposit(amount, { from: ownerAddress });
+      const amountDeposited = amount;
+
+      // await token.approve(strategyContract.address, amount, {
+      //   from: userAddress,
+      // });
+      // await strategyContract.deposit(amount, { from: userAddress });
+      amountDeposited.add(amount);
+
+      // aave user info mock constants
+      const mockAvailableBorrowsBase = BigNumber.from("1").add(
+        GAS_USED_DEPOSIT.add(GAS_USED_SUPPLY)
+          .mul(gasPrice)
+          .mul(gasPriceMultiplier)
+      ); // if math comparisson + 1
+      const mockTotalCollateralBase = amountDeposited;
+      const mockTotalDebtBase = BigNumber.from("705414466");
+      const mockCurrentLiquidationThreshold = BigNumber.from("8182");
+      const mockLtv = BigNumber.from("7909");
+      const mockHealthFactor = BigNumber.from("7723402410349775844");
+
+      // mock aave user info
+      await poolMock.setUserAccountData(
+        mockTotalCollateralBase,
+        mockTotalDebtBase,
+        mockAvailableBorrowsBase,
+        mockCurrentLiquidationThreshold,
+        mockLtv,
+        mockHealthFactor
+      );
+
+      const quotaPrice = await strategyContract.getQuotaPrice({
+        from: ownerAddress,
+      });
+      logger.info(`quotaPrice ${quotaPrice.toString()}`);
+
+      const quotasQty = await strategyContract.getQuotaQty(amount, {
+        from: ownerAddress,
+      });
+
+      const quotasExpected = amount.mul(maxSupply).div(quotaPrice);
+      logger.info(`quotasQty, ${quotasQty}`);
+      logger.info(`quotasExpected, ${quotasExpected}`);
       expect(quotasExpected).eq(quotasQty);
     });
   });
@@ -966,11 +1021,9 @@ describe("StrategyRecursiveFarming", () => {
       const totalSupply = await strategyContract.getTotalSupply();
 
       // calculations (the same as the contract)
-      const profit = mockTotalCollateralBase.add(contractBalance);
-      const outgoings = profit.sub(totalInvested);
-      const netProfit = profit.sub(outgoings);
+      const profit = mockTotalCollateralBase.sub(mockTotalDebtBase);
 
-      const expectedQuotaPrice = totalSupply.add(netProfit).div(totalSupply);
+      const expectedQuotaPrice = BigNumber.from(1).add(profit);
       const quotaPrice = await strategyContract.getQuotaPrice({
         from: ownerAddress,
       });
@@ -1002,7 +1055,7 @@ describe("StrategyRecursiveFarming", () => {
   });
 
   describe("_getAmountFromQuotas", () => {
-    it("should return amount === quotas if nothing is deposited yet, and quotaPrice is equal 1", async () => {
+    it("should return total supply / amount if nothing is deposited yet, and quotaPrice is equal 1", async () => {
       const quotas = BigNumber.from("12");
       const amountFromQuotas = await strategyContract.getAmountFromQuotas(
         quotas,
@@ -1010,7 +1063,9 @@ describe("StrategyRecursiveFarming", () => {
           from: ownerAddress,
         }
       );
-      expect(amountFromQuotas).eq(quotas);
+
+      const quotasExpected = maxSupply.div(quotas);
+      expect(amountFromQuotas).eq(quotasExpected);
     });
 
     it("should return 0 if the quotas value inserted is equal 0", async () => {
@@ -1124,6 +1179,30 @@ describe("StrategyRecursiveFarming", () => {
       const intervalAfter = await strategyContract.getInterval();
 
       expect(intervalAfter).eq(interval);
+    });
+  });
+
+  describe("getQuotasPerAddress", () => {
+    it("should return 0 if the investor didn't deposit yet", async () => {
+      const quotasQtyAddress = await strategyContract.getQuotasPerAddress(
+        userAddress
+      );
+      expect(quotasQtyAddress).eq(BigNumber.from(0));
+    });
+
+    it("should return correctly the quotas that the address has", async () => {
+      const amount = ethers.utils.parseEther("0.1");
+      await token.approve(strategyContract.address, amount, {
+        from: ownerAddress,
+      });
+      await strategyContract.deposit(amount, { from: ownerAddress });
+
+      const quotasQty = await strategyContract.getQuotaQty(amount);
+      const quotasQtyAddress = await strategyContract.getQuotasPerAddress(
+        ownerAddress
+      );
+
+      expect(quotasQtyAddress).eq(quotasQty);
     });
   });
 });
