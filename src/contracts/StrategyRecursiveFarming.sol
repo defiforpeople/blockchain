@@ -13,7 +13,6 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import {KeeperCompatibleInterface} from "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "hardhat/console.sol";
 
 // errors
 error Error__NotEnoughBalance(uint256 balance);
@@ -109,9 +108,6 @@ contract StrategyRecursiveFarming is
         // sum amount to _totalInvested
         _totalInvested += _amount;
 
-        console.log("quotas: ", _quotas);
-        console.log("investmentAmount: ", _amount);
-
         // update the status of the strategy to the next step to do
         status = StrategyStatus.Borrow;
 
@@ -126,11 +122,12 @@ contract StrategyRecursiveFarming is
         emit Deposit(msg.sender, _amount, _quotas);
     }
 
+    // method for borrow in Aave
     function _borrow(uint256 _borrowAvailable) internal {
         // update status to the Supply (amount borrowed), that is the next step to do
         status = StrategyStatus.Supply;
 
-        // method for borrow in Aave
+        // execute borrow in Aave
         aavePool.borrow(
             address(token),
             _borrowAvailable,
@@ -194,7 +191,6 @@ contract StrategyRecursiveFarming is
             (, , uint256 borrowAvailable, , , ) = aavePool.getUserAccountData(
                 address(this)
             );
-            console.log("borrowAvailable", borrowAvailable);
 
             // if the amount is not enough for continuing with the execution, the status will be Done and the exec will be finished
             if (
@@ -246,7 +242,6 @@ contract StrategyRecursiveFarming is
 
         uint256 quotasToWithdraw = (_amountPercentage *
             _investments[msg.sender]) / 100;
-        console.log("quotasToWithdraw: ", quotasToWithdraw);
 
         // check if user has requested amount
         if (quotasToWithdraw == 0) {
@@ -255,9 +250,8 @@ contract StrategyRecursiveFarming is
 
         // rest the amount repayed of investments
         uint256 amount = _getAmountFromQuotas(quotasToWithdraw);
-        console.log("amount", amount);
 
-        console.log("Total quotas", _quotas);
+        // updates investments
         _investments[msg.sender] -= quotasToWithdraw;
 
         // update for not doing supply or borrow wtih the withdraw amount, until is in the investors address back
@@ -265,7 +259,6 @@ contract StrategyRecursiveFarming is
 
         // repay the Aave loan with collateral
         aavePool.repayWithATokens(address(token), amount, INTEREST_RATE_MODE);
-        console.log("repayed (from strategy)");
 
         // update the status of strategy for the next step needed
         emit Withdraw(address(msg.sender), amount, quotasToWithdraw);
@@ -281,7 +274,6 @@ contract StrategyRecursiveFarming is
 
         // withdraw token amount from aave, to the userAddr
         aavePool.withdraw(address(token), _amount, _userAddr);
-        console.log("withdrawed (from SC)");
     }
 
     // method for claiming rewards in aave
@@ -291,10 +283,6 @@ contract StrategyRecursiveFarming is
 
     // method for getting the quota quantity based on the adeposited amount
     function _getQuotaQty(uint256 _amount) internal view returns (uint256) {
-        console.log(
-            "quotasQuantity",
-            (_amount * _wavaxTotalSupply) / _getQuotaPrice()
-        );
         return (_amount * _wavaxTotalSupply) / _getQuotaPrice();
     }
 
@@ -303,22 +291,14 @@ contract StrategyRecursiveFarming is
         (uint256 totalCollateralBase, uint256 totalDebtBase, , , , ) = aavePool
             .getUserAccountData(address(this));
 
-        console.log("totalCollateralBase: ", totalCollateralBase);
-        console.log("totalDebtBase: ", totalDebtBase);
-
         // calculate profit (in a tuple because of tryAdd/trySub returns)
         (, uint256 profit) = totalCollateralBase.trySub(totalDebtBase);
 
-        console.log("profit: ", profit);
-
-        console.log("wavaxTotalSupply: ", _wavaxTotalSupply);
-        // normalized profit +  is for avoid quotaPrice to be 0
-        uint256 quotaPrice = 1 + profit;
-
-        console.log("quotaPrice: ", quotaPrice);
-        return quotaPrice;
+        // 1 + profit is for avoid quotaPrice to be 0
+        return 1 + profit;
     }
 
+    // method that returns token amount based on the quotas amount
     function _getAmountFromQuotas(uint256 _quotaAmount)
         internal
         view
@@ -327,10 +307,6 @@ contract StrategyRecursiveFarming is
         if (_quotaAmount == 0) {
             return 0;
         }
-        console.log(
-            "amount from quota",
-            (_wavaxTotalSupply / _quotaAmount) * _getQuotaPrice()
-        );
         return (_wavaxTotalSupply / _quotaAmount) * _getQuotaPrice();
     }
 
