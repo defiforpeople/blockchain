@@ -35,22 +35,10 @@ describe("StrategyRecursiveFarming", () => {
   let gasPriceMultiplier: BigNumber;
 
   beforeEach(async () => {
-    // prepare (signers) ownerWallet and userWallet
-    owner = ethers.provider.getSigner(0);
+    // prepare (signers) ownerWallet and userWallet (10 ETH each)
+    [owner, user] = await ethers.getSigners();
     ownerAddress = await owner.getAddress();
-
-    user = ethers.provider.getSigner(2);
     userAddress = await user.getAddress();
-
-    // send 1 eth from signer(0) to random ownerWallet and userWallet
-    await owner.sendTransaction({
-      to: ownerAddress,
-      value: ethers.utils.parseEther("1.0"),
-    });
-    await owner.sendTransaction({
-      to: userAddress,
-      value: ethers.utils.parseEther("1.0"),
-    });
 
     // get gas price and set decimals, for MOCKAgg contract, and for testing purpose
     gasPrice = await ethers.provider.getGasPrice();
