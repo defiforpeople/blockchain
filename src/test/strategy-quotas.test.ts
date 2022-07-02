@@ -1,12 +1,9 @@
-// eslint-disable-next-line camelcase
 import {
   StrategyRecursiveFarming,
-  // eslint-disable-next-line camelcase
   StrategyRecursiveFarming__factory,
   MockV3Aggregator,
   DFP,
   MockPoolDFP,
-  // eslint-disable-next-line camelcase
   IRewardsController__factory,
 } from "../typechain";
 import { assert, expect, use } from "chai";
@@ -16,7 +13,6 @@ import { waffleChai } from "@ethereum-waffle/chai";
 import {
   deployMockContract,
   MockContract,
-  // eslint-disable-next-line node/no-extraneous-import
 } from "@ethereum-waffle/mock-contract";
 import { BigNumber, Signer } from "ethers";
 const logger = require("pino")();
@@ -89,7 +85,6 @@ describe("StrategyRecursiveFarming", () => {
     // get and deploy StrategyRecursiveFarming contract
     const strategyRecursiveFarming = (await ethers.getContractFactory(
       "StrategyRecursiveFarming"
-      // eslint-disable-next-line camelcase
     )) as StrategyRecursiveFarming__factory;
 
     keeperInterval = BigNumber.from(300); // define interval for keeper to execute
