@@ -89,7 +89,6 @@ describe("StrategyRecursiveFarming", () => {
     await strategyContract.deployed();
   });
 
-  // Implement aToken in MockPool
   describe("requestWithdraw", () => {
     it("Should revert if the percentage for withdraw is zero", async () => {
       const quotasPercentage = BigNumber.from("0");
@@ -111,10 +110,6 @@ describe("StrategyRecursiveFarming", () => {
 
     it("Should revert if sender's quotas balance is 0", async () => {
       const quotasRequested = BigNumber.from("1");
-      // const quotasBalance = await strategyContract.getQuotasPerAddress(
-      //   ownerAddress
-      // );
-      // const quotasToWithdraw = quotasRequested.mul(quotasBalance).div(100);
       await expect(
         strategyContract.requestWithdraw(quotasRequested, {
           from: ownerAddress,

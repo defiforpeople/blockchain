@@ -143,16 +143,8 @@ describe("StrategyRecursiveFarming", () => {
         await strategyContract.getGasInfo();
 
       const amount = ethers.utils.parseEther("0.1");
-      // await token.approve(strategyContract.address, amount, {
-      //   from: ownerAddress,
-      // });
-      // await strategyContract.deposit(amount, { from: ownerAddress });
-      const amountDeposited = amount;
 
-      // await token.approve(strategyContract.address, amount, {
-      //   from: userAddress,
-      // });
-      // await strategyContract.deposit(amount, { from: userAddress });
+      const amountDeposited = amount;
       amountDeposited.add(amount);
 
       // aave user info mock constants
