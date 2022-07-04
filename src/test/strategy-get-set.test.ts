@@ -6,7 +6,7 @@ import {
   MockPoolDFP,
   IRewardsController__factory,
 } from "../typechain";
-import { assert, expect, use } from "chai";
+import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
@@ -16,6 +16,9 @@ import {
 } from "@ethereum-waffle/mock-contract";
 import { BigNumber, Signer } from "ethers";
 use(waffleChai);
+
+/* This tests that the set or update functions 
+work correctly, using the get or view functions */
 
 describe("StrategyRecursiveFarming", () => {
   let owner: Signer;
@@ -111,7 +114,7 @@ describe("StrategyRecursiveFarming", () => {
       const gasPriceMulAfter = await strategyContract.getGasPriceMultiplier();
 
       expect(gasPriceMulAfter).eq(gasPriceToUpdate);
-      assert(gasPriceMulAfter !== gasPriceMultiplier);
+      expect(gasPriceMulAfter).not.to.be.eq(gasPriceMultiplier);
     });
 
     it("shouldn't update if gasPriceMultiplier is the same than before", async () => {
@@ -145,7 +148,7 @@ describe("StrategyRecursiveFarming", () => {
       const aaveRefAfter = await strategyContract.getAaveRefCode();
 
       expect(aaveRefAfter).eq(aaveRefToUpdate);
-      assert(aaveRefAfter !== aaveRefCode);
+      expect(aaveRefAfter).not.to.be.eq(aaveRefCode);
     });
 
     it("shouldn't update if aaveRefCode is the same than before", async () => {
@@ -179,7 +182,7 @@ describe("StrategyRecursiveFarming", () => {
       const intervalAfter = await strategyContract.getInterval();
 
       expect(intervalAfter).eq(intervalToUpdate);
-      assert(intervalAfter !== keeperInterval);
+      expect(intervalAfter).not.to.be.eq(keeperInterval);
     });
 
     it("shouldn't update if interval is the same than before", async () => {
@@ -209,7 +212,9 @@ describe("StrategyRecursiveFarming", () => {
       });
       await strategyContract.deposit(amount, { from: ownerAddress });
 
+      // external function that returns quotas given an amount
       const quotasQty = await strategyContract.getQuotaQty(amount);
+      // contract function that returns quotas given an address (in this case, after updating the state with deposit function)
       const quotasQtyAddress = await strategyContract.getQuotasPerAddress(
         ownerAddress
       );

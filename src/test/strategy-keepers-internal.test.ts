@@ -6,7 +6,7 @@ import {
   MockPoolDFP,
   IRewardsController__factory,
 } from "../typechain";
-import { assert, expect, use } from "chai";
+import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { network, ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
@@ -114,7 +114,7 @@ describe("StrategyRecursiveFarming", () => {
         []
       );
 
-      assert(!upkeepNeeded);
+      await expect(upkeepNeeded).to.be.false;
     });
 
     it("Should return false if status is Done but interval is ok and status is false", async () => {
@@ -158,7 +158,7 @@ describe("StrategyRecursiveFarming", () => {
       const { upkeepNeeded } = await strategyContract.callStatic.checkUpkeep(
         []
       );
-      assert(!upkeepNeeded);
+      await expect(upkeepNeeded).to.be.false;
     });
 
     it("should return false if interval is not reach yet but status is Borrow", async () => {
@@ -175,8 +175,8 @@ describe("StrategyRecursiveFarming", () => {
         "0x"
       );
 
+      await expect(upkeepNeeded).to.be.false;
       expect(status).to.equal(StrategyStatus.Borrow);
-      assert(!upkeepNeeded);
     });
 
     it("should return false if interval is not reach yet but status is Supply", async () => {
@@ -224,7 +224,7 @@ describe("StrategyRecursiveFarming", () => {
       const status = await strategyContract.getStatus();
 
       expect(status).to.be.equal(StrategyStatus.Supply);
-      assert(!upkeepNeeded);
+      await expect(upkeepNeeded).to.be.false;
     });
 
     it("should return true if interval is reach and status is Borrow", async () => {
@@ -244,7 +244,7 @@ describe("StrategyRecursiveFarming", () => {
         "0x"
       );
 
-      assert(upkeepNeeded);
+      await expect(upkeepNeeded).to.be.true;
     });
 
     it("should return false if interval is reach, status is Supply but withdraw is true", async () => {
@@ -306,8 +306,8 @@ describe("StrategyRecursiveFarming", () => {
         from: ownerAddress,
       });
 
-      assert(withdrawing);
-      assert(!upkeepNeeded);
+      await expect(withdrawing).to.be.true;
+      await expect(upkeepNeeded).to.be.false;
     });
 
     it("should return false if interval is reach, status is Borrow but withdraw is true", async () => {
@@ -336,8 +336,8 @@ describe("StrategyRecursiveFarming", () => {
         from: ownerAddress,
       });
 
-      assert(withdrawing);
-      assert(!upkeepNeeded);
+      await expect(withdrawing).to.be.true;
+      await expect(upkeepNeeded).to.be.false;
     });
   });
 
@@ -404,7 +404,7 @@ describe("StrategyRecursiveFarming", () => {
         strategyContract,
         mockAvailableBorrowsBase
       );
-      assert((await strategyContract.getStatus()) === StrategyStatus.Supply);
+      expect(await strategyContract.getStatus()).to.eq(StrategyStatus.Supply);
     });
 
     it("Should execute supply to aave, and update status to Borrow and should update '_lastTimestamp'", async () => {
@@ -461,7 +461,7 @@ describe("StrategyRecursiveFarming", () => {
       expect(await strategyContract.getLastTimestamp()).to.be.gt(
         firstTimestamp
       );
-      assert((await strategyContract.getStatus()) === StrategyStatus.Borrow);
+      expect(await strategyContract.getStatus()).to.eq(StrategyStatus.Borrow);
     });
 
     it("Should update status from Borrow to Done when borrowAvailable is not enough and should update '_lastTimestamp'", async () => {
@@ -532,7 +532,7 @@ describe("StrategyRecursiveFarming", () => {
       const secondTimestamp = await strategyContract.getLastTimestamp();
 
       expect(secondTimestamp).to.be.gt(firstTimestamp);
-      assert((await strategyContract.getStatus()) === StrategyStatus.Done);
+      expect(await strategyContract.getStatus()).to.eq(StrategyStatus.Done);
     });
 
     it("Should update status from Supply to Done when the balance is not enough and should update '_lastTimestamp'", async () => {
@@ -591,7 +591,7 @@ describe("StrategyRecursiveFarming", () => {
       const secondTimestamp = await strategyContract.getLastTimestamp();
 
       expect(secondTimestamp).to.be.gt(firstTimestamp);
-      assert((await strategyContract.getStatus()) === StrategyStatus.Done);
+      expect(await strategyContract.getStatus()).to.eq(StrategyStatus.Done);
     });
   });
 });

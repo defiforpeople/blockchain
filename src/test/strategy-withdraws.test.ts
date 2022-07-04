@@ -6,7 +6,7 @@ import {
   MockPoolDFP,
   IRewardsController__factory,
 } from "../typechain";
-import { assert, expect, use } from "chai";
+import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
@@ -215,6 +215,9 @@ describe("StrategyRecursiveFarming", () => {
       ).to.be.reverted;
     });
 
+    /* The following test will execute a deposit, and a 
+    istener will be waiting to the event emition in a promise.
+    In that listener, the function Withdraw will be tested */
     it("should withdraw the requested amount to the address", async () => {
       const amount = ethers.utils.parseEther("0.1");
       await token.approve(strategyContract.address, amount, {
@@ -243,7 +246,7 @@ describe("StrategyRecursiveFarming", () => {
 
               const secondTotalInvested =
                 await strategyContract.getTotalInvested();
-              assert(firstTotalInvested.sub(secondTotalInvested).eq(amount));
+              expect(firstTotalInvested.sub(secondTotalInvested)).eq(amount);
 
               resolve("");
             } catch (err) {

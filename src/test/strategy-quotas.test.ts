@@ -6,7 +6,7 @@ import {
   MockPoolDFP,
   IRewardsController__factory,
 } from "../typechain";
-import { assert, expect, use } from "chai";
+import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
@@ -99,7 +99,7 @@ describe("StrategyRecursiveFarming", () => {
       const quotasQty = await strategyContract.getQuotaQty(amount, {
         from: ownerAddress,
       });
-      assert(quotasQty._isBigNumber);
+      await expect(quotasQty._isBigNumber).to.be.true;
     });
 
     it("should revert if the sender isn't the owner", async () => {
@@ -190,7 +190,7 @@ describe("StrategyRecursiveFarming", () => {
       const quotaPrice = await strategyContract.getQuotaPrice({
         from: ownerAddress,
       });
-      assert(quotaPrice._isBigNumber);
+      await expect(quotaPrice._isBigNumber).to.be.true;
     });
 
     it("should revert if the sender isn't the owner", async () => {
@@ -263,7 +263,7 @@ describe("StrategyRecursiveFarming", () => {
           from: ownerAddress,
         }
       );
-      assert(amountFromQuotas._isBigNumber);
+      await expect(amountFromQuotas._isBigNumber).to.be.true;
     });
 
     it("should revert if the sender isn't the owner", async () => {

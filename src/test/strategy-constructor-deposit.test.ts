@@ -6,7 +6,7 @@ import {
   MockPoolDFP,
   IRewardsController__factory,
 } from "../typechain";
-import { assert, expect, use } from "chai";
+import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
@@ -123,7 +123,7 @@ describe("StrategyRecursiveFarming", () => {
       expect(gasPriceMultiplierContract).eq(gasPriceMultiplier);
       expect(tokenAddresses.toString()).eq([token.address].toString());
       expect(aaveRefCodeContract).eq(aaveRefCode);
-      assert(lastTimestamp > BigNumber.from(0));
+      expect(lastTimestamp).to.be.gt(BigNumber.from(0));
     });
   });
 
@@ -167,7 +167,7 @@ describe("StrategyRecursiveFarming", () => {
       expect(status).to.equal(StrategyStatus.Borrow);
       expect(totalInvested.toString()).to.equal(amount.toString());
       // Only test if updates quotas here. Then will be tested if it is correct in future quota's functions tests
-      assert(quota > BigNumber.from(0));
+      expect(quota).to.be.gt(BigNumber.from(0));
     });
     it("emits correctly Deposit event", async () => {
       const amount = ethers.utils.parseEther("0.1");
