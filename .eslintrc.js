@@ -16,6 +16,13 @@ module.exports = {
     ecmaVersion: 12,
   },
   rules: {
+    camelcase: ["error", { allow: ["__factory"] }],
+    "node/no-extraneous-import": [
+      "error",
+      {
+        allowModules: ["@ethereum-waffle/mock-contract"],
+      },
+    ],
     "node/no-unsupported-features/es-syntax": [
       "error",
       { ignores: ["modules"] },
