@@ -69,10 +69,6 @@ contract StrategyRecursiveFarming is
         Done
     }
 
-    // events for Deposit and Withdraw funcitons
-    event Deposit(address indexed userAddr, uint256 amount, uint256 quotas);
-    event Withdraw(address indexed userAddr, uint256 amount, uint256 quotas);
-
     constructor(
         address _aavePoolAddr,
         address _gasPriceFeedAddr,
