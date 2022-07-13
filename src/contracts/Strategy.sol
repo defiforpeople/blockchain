@@ -6,9 +6,6 @@ import {IStrategy} from "./IStrategy.sol";
 contract Strategy is IStrategy {
     constructor() {}
 
-    event Deposit(address indexed userAddr, uint256 amount, uint256 quotas);
-    event Withdraw(address indexed userAddr, uint256 amount, uint256 quotas);
-
     function deposit(uint256 amount) external {
         emit Deposit(msg.sender, amount, amount);
     }
