@@ -8,10 +8,13 @@ import {
 } from "../../typechain";
 
 const { SUPPLY_CONTRACT_ADDRESS } = process.env;
+if (!SUPPLY_CONTRACT_ADDRESS || !SUPPLY_CONTRACT_ADDRESS.length) {
+  throw new Error("invalid ENV values");
+}
 
 export async function deposit(
   amount: BigNumber,
-  senderAddr: string,
+  userAddr: string,
   tokenAddr: string,
   aavePoolAddr: string
 ) {
@@ -26,7 +29,7 @@ export async function deposit(
   )) as SupplyAave;
 
   const approveTx = await token.approve(`${aavePoolAddr}`, amount, {
-    from: senderAddr,
+    from: userAddr,
   });
   await approveTx.wait();
 
@@ -35,9 +38,9 @@ export async function deposit(
   const permitR = `${approveTx.r}`;
   const permitS = `${approveTx.s}`;
 
-  const oneHour = BigNumber.from(`${60 * 60}`); // 1 hour
+  const oneHour = BigNumber.from(60 * 60); // 1 hour
   // 1 hour from the tx timestamp
-  const deadline = BigNumber.from(`${approveTx.timestamp}`).add(oneHour);
+  const deadline = BigNumber.from(approveTx.timestamp).add(oneHour);
 
   const supplyTx = await supplyContract.deposit(
     amount,
@@ -47,7 +50,7 @@ export async function deposit(
     permitR,
     permitS,
     {
-      from: senderAddr,
+      from: userAddr,
     }
   );
   await supplyTx.wait();
