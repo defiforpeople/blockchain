@@ -5,8 +5,8 @@ import { IPool__factory, IPool } from "../../typechain";
 const logger = require("pino")();
 
 // get ENV values
-const { WETH_ADDRESS, AAVE_POOL_ADDRESS } = process.env;
-if (!WETH_ADDRESS || !AAVE_POOL_ADDRESS) {
+const { AAVE_POOL_ADDRESS } = process.env;
+if (!AAVE_POOL_ADDRESS) {
   throw new Error("invalid ENV values");
 }
 
