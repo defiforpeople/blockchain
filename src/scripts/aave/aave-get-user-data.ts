@@ -10,7 +10,10 @@ if (!AAVE_POOL_ADDRESS) {
   throw new Error("invalid ENV values");
 }
 
-export default async function getUserDataAave(aavePoolAddress: string) {
+export default async function getUserDataAave(
+  aavePoolAddress: string,
+  asset?: string
+) {
   // get wallet from provider
   const [wallet] = await ethers.getSigners();
 
@@ -28,6 +31,11 @@ export default async function getUserDataAave(aavePoolAddress: string) {
 
   const assetConfig = await aavePool.getConfiguration(wallet.address);
   logger.info(`assetConfi: ${assetConfig}`);
+
+  const normalizedIncome = await aavePool.getReserveNormalizedIncome(
+    `${asset}`
+  );
+  logger.info(`normalizedIncome: ${normalizedIncome}`);
 }
 
 // run script
