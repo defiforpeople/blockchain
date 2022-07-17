@@ -12,7 +12,7 @@ if (!AAVE_POOL_ADDRESS) {
 
 export default async function getUserDataAave(
   aavePoolAddress: string,
-  asset?: string
+  asset: string
 ) {
   // get wallet from provider
   const [wallet] = await ethers.getSigners();
@@ -32,18 +32,16 @@ export default async function getUserDataAave(
   const assetConfig = await aavePool.getConfiguration(wallet.address);
   logger.info(`assetConfi: ${assetConfig}`);
 
-  const normalizedIncome = await aavePool.getReserveNormalizedIncome(
-    `${asset}`
-  );
+  const normalizedIncome = await aavePool.getReserveNormalizedIncome(asset);
   logger.info(`normalizedIncome: ${normalizedIncome}`);
 }
 
-// run script
-(async () => {
-  try {
-    await getUserDataAave(AAVE_POOL_ADDRESS);
-  } catch (err) {
-    logger.error(err);
-    process.exitCode = 1;
-  }
-})();
+// // run script
+// (async () => {
+//   try {
+//     await getUserDataAave(AAVE_POOL_ADDRESS, asset);
+//   } catch (err) {
+//     logger.error(err);
+//     process.exitCode = 1;
+//   }
+// })();
