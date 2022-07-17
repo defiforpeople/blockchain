@@ -15,7 +15,7 @@ error Error__InvalidToken();
 contract SupplyAave {
     // events
     event Deposit(address indexed userAddr, uint256 amount);
-    event Withdraw(address indexed userAddr, uint256 lpAmount);
+    event Withdraw(address indexed userAddr, uint256 amount);
 
     // variables
     IPool internal immutable _aavePool;
