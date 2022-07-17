@@ -44,7 +44,7 @@ contract SupplyAave {
     }
 
     // method for supplying tokens to Aave pool, with user permittion
-    function supply(
+    function deposit(
         uint256 amount,
         address tokenAddr,
         uint256 deadline,
