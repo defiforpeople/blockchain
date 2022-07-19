@@ -1,6 +1,7 @@
 import * as dotenv from "dotenv";
 
 import { HardhatUserConfig, task, subtask } from "hardhat/config";
+import { NetworkUserConfig } from "hardhat/types/config";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
@@ -8,7 +9,6 @@ import "hardhat-gas-reporter";
 import "solidity-coverage";
 
 import * as main from "./src/utils/main";
-import * as strategy from "./src/utils/strategy";
 
 import pino from "pino";
 const logger = pino();
@@ -144,56 +144,6 @@ task("dfp-strategy", "Run strategy contract tasks")
     }
   });
 
-subtask("dfp-strategy-deposit", "Deposit to strategy")
-  .addParam("strategyAddr", "The address of strategy contract")
-  .addParam("tokenAddr", "The address of token contract")
-  .addParam("amount", "The amount of deposit")
-  .setAction(async ({ strategyAddr, tokenAddr, amount }, { ethers }) => {
-    // define strategy contract
-    const contract = await strategy.recursiveFarming.getOrDeployContract(
-      ethers,
-      strategyAddr
-    );
-
-    // deposit
-    await strategy.recursiveFarming.deposit(
-      ethers,
-      contract.address,
-      tokenAddr,
-      amount
-    );
-
-    console.log(`Deposit success for token=${tokenAddr} amount=${amount} `);
-  });
-
-subtask("dfp-strategy-withdraw", "Withdraw from strategy")
-  .addParam("strategyAddr", "The address of strategy contract")
-  .addParam("userAddr", "The address of user wallet")
-  .addParam("tokenAddr", "The address of token contract")
-  .addParam("amount", "The amount of the withdraw")
-  .setAction(
-    async ({ strategyAddr, userAddr, tokenAddr, amount }, { ethers }) => {
-      // define strategy contract
-      const contract = await strategy.recursiveFarming.getOrDeployContract(
-        ethers,
-        strategyAddr
-      );
-
-      // withdraw
-      await strategy.recursiveFarming.withdraw(
-        ethers,
-        contract.address,
-        userAddr,
-        tokenAddr,
-        amount
-      );
-
-      console.log(
-        `Withdraw success for user=${userAddr} token=${tokenAddr} amount=${amount} `
-      );
-    }
-  );
-
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
 const config: HardhatUserConfig = {
@@ -217,17 +167,12 @@ const config: HardhatUserConfig = {
     ],
   },
   networks: {
-    goerli: {
+    polygon: {
       url: process.env.URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
-    rinkeby: {
-      url: process.env.URL || "",
-      accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
-    },
-    fuji: {
+    avalanche: {
       url: process.env.URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
@@ -237,7 +182,12 @@ const config: HardhatUserConfig = {
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
-    polygon: {
+    rinkeby: {
+      url: process.env.URL || "",
+      accounts:
+        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
+    ropsten: {
       url: process.env.URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
