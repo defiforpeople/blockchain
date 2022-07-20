@@ -5,7 +5,7 @@ import {
   DFP,
   MockPoolDFP,
   IRewardsController__factory,
-} from "../typechain";
+} from "../../../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";

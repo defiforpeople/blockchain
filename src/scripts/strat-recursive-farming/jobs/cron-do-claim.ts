@@ -1,5 +1,5 @@
 import { sleep, day } from "../../../utils/helpers/sleep";
-import { claimRewardToken } from "../recursive-farming/claimRewards";
+import { claimRewardToken } from "../claimRewards";
 const logger = require("pino")();
 
 // execute claimRewardToken() every 1 day

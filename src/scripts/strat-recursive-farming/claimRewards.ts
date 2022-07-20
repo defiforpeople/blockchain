@@ -1,8 +1,8 @@
 import { ethers } from "hardhat";
 import "@nomiclabs/hardhat-ethers";
 // eslint-disable-next-line camelcase
-import { StrategyRecursiveFarming } from "../../../typechain";
-import { sleep, day } from "../../../utils/helpers/sleep";
+import { StrategyRecursiveFarming } from "../../typechain";
+import { sleep, day } from "../../utils/helpers/sleep";
 const logger = require("pino")();
 
 // defined constants

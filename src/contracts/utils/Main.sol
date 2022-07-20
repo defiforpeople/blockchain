@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "./IStrategy.sol";
+import "../interfaces/IStrategy.sol";
 import "hardhat/console.sol";
 
 contract Main is Ownable {

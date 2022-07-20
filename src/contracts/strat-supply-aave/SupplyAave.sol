@@ -10,19 +10,18 @@ error Error__NotEnoughBalance(uint256 balance);
 error Error__NotEnoughAllowance(uint256 allowance);
 error Error__NotEnoughLP(uint256 lpAmount);
 error Error__AmountIsZero();
-error Error__InvalidToken();
+error Error__InvalidToken(address token);
 
 contract SupplyAave {
     // events
     event Deposit(address indexed userAddr, uint256 amount);
     event Withdraw(address indexed userAddr, uint256 amount);
 
-    // variables
-    IPool internal immutable _aavePool;
+    IPool public immutable AAVE_POOL;
     uint16 internal immutable _aaveRefCode;
 
     constructor(address aavePool, uint16 aaveRefCode) {
-        _aavePool = IPool(aavePool);
+        AAVE_POOL = IPool(aavePool);
         _aaveRefCode = aaveRefCode;
     }
 
@@ -30,15 +29,6 @@ contract SupplyAave {
     modifier checkAmount(uint256 amount) {
         if (amount == 0) {
             revert Error__AmountIsZero();
-        }
-        _;
-    }
-
-    // TODO(nb): check if the token is available in Aave pool
-    // modifier that checks if the token is available in Aave pool
-    modifier checkToken(address token) {
-        if (token == address(0)) {
-            revert Error__InvalidToken();
         }
         _;
     }
@@ -51,7 +41,7 @@ contract SupplyAave {
         uint8 permitV,
         bytes32 permitR,
         bytes32 permitS
-    ) external checkAmount(amount) checkToken(tokenAddr) {
+    ) external checkAmount(amount) {
         IERC20 token = IERC20(tokenAddr);
 
         // check that user give enoguh allowance to the contract for supplying the token
@@ -70,7 +60,7 @@ contract SupplyAave {
         }
 
         // supply tokens to Aave pool
-        _aavePool.supplyWithPermit(
+        AAVE_POOL.supplyWithPermit(
             (address(token)),
             amount,
             address(this),
@@ -88,7 +78,6 @@ contract SupplyAave {
     function withdraw(uint256 lpAmount, address tokenAddr)
         external
         checkAmount(lpAmount)
-        checkToken(tokenAddr)
     {
         IERC20 token = IERC20(tokenAddr);
 
@@ -98,7 +87,7 @@ contract SupplyAave {
         }
 
         // withdraw token lpAmount from aave, to the userAddr
-        _aavePool.withdraw(address(token), lpAmount, msg.sender);
+        AAVE_POOL.withdraw(address(token), lpAmount, msg.sender);
 
         emit Withdraw(msg.sender, lpAmount);
     }
