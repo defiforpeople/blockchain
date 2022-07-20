@@ -3,6 +3,7 @@ pragma solidity 0.8.10;
 
 import {IPoolAddressesProvider} from "@aave/core-v3/contracts/interfaces/IPoolAddressesProvider.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DFP} from "./DFP.sol";
 import "hardhat/console.sol";
 
 contract MockPoolDFP {
@@ -89,6 +90,30 @@ contract MockPoolDFP {
             IERC20(asset).balanceOf(msg.sender) >= amount,
             "Not enough amount"
         );
+        balances[msg.sender] += amount;
+        IERC20(asset).transferFrom(onBehalfOf, address(this), amount);
+    }
+
+    function supplyWithPermit(
+        address asset,
+        uint256 amount,
+        address onBehalfOf,
+        uint16 referralCode,
+        uint256 deadline,
+        uint8 permitV,
+        bytes32 permitR,
+        bytes32 permitS
+    ) external {
+        require(balances[msg.sender] >= amount, "Not enough amount");
+        require(
+            IERC20(asset).balanceOf(msg.sender) >= amount,
+            "Not enough amount"
+        );
+        require(
+            IERC20(asset).allowance(onBehalfOf, address(this)) >= amount,
+            "Not enough allowance"
+        );
+
         balances[msg.sender] += amount;
         IERC20(asset).transferFrom(onBehalfOf, address(this), amount);
     }

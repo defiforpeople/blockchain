@@ -6,8 +6,8 @@ import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // errors
-error Error__NotEnoughBalance(uint256 balance);
-error Error__NotEnoughAllowance(uint256 allowance);
+error Error__NotEnoughBalance(uint256 balance, uint256 depositAmount);
+error Error__NotEnoughAllowance(uint256 allowance, uint256 depositAmount);
 error Error__NotEnoughLP(uint256 lpAmount);
 error Error__AmountIsZero();
 error Error__InvalidToken(address token);
@@ -18,11 +18,11 @@ contract SupplyAave {
     event Withdraw(address indexed userAddr, uint256 amount);
 
     IPool public immutable AAVE_POOL;
-    uint16 internal immutable _aaveRefCode;
+    uint16 public immutable AAVE_REF_CODE;
 
     constructor(address aavePool, uint16 aaveRefCode) {
         AAVE_POOL = IPool(aavePool);
-        _aaveRefCode = aaveRefCode;
+        AAVE_REF_CODE = aaveRefCode;
     }
 
     // modifier that checks amount is not zero
@@ -50,13 +50,14 @@ contract SupplyAave {
             token.allowance(msg.sender, address(this)) < amount
         ) {
             revert Error__NotEnoughAllowance(
-                token.allowance(msg.sender, address(this))
+                token.allowance(msg.sender, address(this)),
+                amount
             );
         }
 
         // check that user has enough balance to supply the token
         if (token.balanceOf(msg.sender) < amount || amount == 0) {
-            revert Error__NotEnoughBalance(token.balanceOf(msg.sender));
+            revert Error__NotEnoughBalance(token.balanceOf(msg.sender), amount);
         }
 
         // supply tokens to Aave pool
@@ -64,7 +65,7 @@ contract SupplyAave {
             (address(token)),
             amount,
             address(this),
-            _aaveRefCode,
+            AAVE_REF_CODE,
             deadline,
             permitV,
             permitR,
@@ -83,7 +84,10 @@ contract SupplyAave {
 
         // check that user has enough LP to withdraw
         if (token.balanceOf(msg.sender) < lpAmount || lpAmount == 0) {
-            revert Error__NotEnoughBalance(token.balanceOf(msg.sender));
+            revert Error__NotEnoughBalance(
+                token.balanceOf(msg.sender),
+                lpAmount
+            );
         }
 
         // withdraw token lpAmount from aave, to the userAddr
